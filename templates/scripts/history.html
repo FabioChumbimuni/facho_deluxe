@@ -1,4 +1,3 @@
-{% load hasattr_filter %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -40,6 +39,22 @@
         tr:nth-child(odd) {
             background-color: #1a1a1a;
         }
+        .pagination {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .pagination a, .pagination strong {
+            display: inline-block;
+            margin: 0 5px;
+            padding: 5px 10px;
+            text-decoration: none;
+            border: 1px solid #66ccff;
+            color: #66ccff;
+        }
+        .pagination strong {
+            background-color: #66ccff;
+            color: #1a1a1a;
+        }
         a.btn-back {
             display: inline-block;
             background-color: #333;
@@ -71,11 +86,11 @@
             <tbody>
                 {% for record in records %}
                 <tr>
-                    {% if record|hasattr:"script" %}
+                    {% if record.record_type == 'script' %}
                         <!-- Es un ExecutionRecord -->
                         <td>{{ record.script.titulo }}</td>
                         <td>{{ record.script.archivo }}</td>
-                    {% elif record|hasattr:"bloque" %}
+                    {% elif record.record_type == 'bloque' %}
                         <!-- Es un BloqueEjecucionRecord -->
                         <td>{{ record.bloque.nombre }}</td>
                         <td>Bloque</td>
@@ -101,6 +116,24 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Controles de paginación -->
+    <div class="pagination">
+        {% if records.has_previous %}
+            <a href="?page={{ records.previous_page_number }}">Anterior</a>
+        {% endif %}
+        {% for num in records.paginator.page_range %}
+            {% if records.number == num %}
+                <strong>{{ num }}</strong>
+            {% else %}
+                <a href="?page={{ num }}">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if records.has_next %}
+            <a href="?page={{ records.next_page_number }}">Siguiente</a>
+        {% endif %}
+    </div>
+
     <a href="{% url 'dashboard' %}" class="btn-back">Volver al Dashboard</a>
 </body>
 </html>

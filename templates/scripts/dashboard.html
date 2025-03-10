@@ -148,10 +148,10 @@
                         Sin ejecución
                     {% endif %}
                 </p>
-                <!-- Botón para ejecutar manualmente este bloque -->
-                <a href="{% url 'ejecutar_bloque_manual' item.bloque.id %}" class="btn-execute">Ejecutar Bloque</a>
+                <!-- Contenedor para alinear el botón a la derecha -->
+                <div style="text-align: right;">
+                    <a href="{% url 'ejecutar_bloque_manual' item.bloque.id %}" class="btn-execute">Ejecutar Bloque</a>
+                </div>
             </div>
         {% endfor %}
     </div>
-</body>
-</html>

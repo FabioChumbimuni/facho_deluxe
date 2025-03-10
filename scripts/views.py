@@ -3,6 +3,7 @@ from django.shortcuts import render, redirect
 from django.utils import timezone
 from .models import Script, ExecutionRecord, ExecutionControl, BloqueEjecucionRecord, BloqueEjecucion
 from .forms import AddScriptForm
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 def index(request):
     return redirect('dashboard')
@@ -86,21 +87,52 @@ def add_script(request):
         form = AddScriptForm()
     return render(request, 'scripts/add_script.html', {'form': form})
 
+# scripts/views.py
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.shortcuts import render
+from .models import ExecutionRecord, BloqueEjecucionRecord
+
 def history(request):
     """
-    Vista de historial consolidado: incluye registros individuales de ejecución (ExecutionRecord)
-    y registros de bloques personalizados (BloqueEjecucionRecord).
-    Se ordena por fecha de inicio (descendente).
+    Vista de historial consolidado.
+    Combina ExecutionRecord y BloqueEjecucionRecord en una sola lista,
+    asigna a cada registro un atributo 'record_type' y luego pagina la lista.
     """
+    # Obtén los registros individuales de ejecución de scripts
     script_records = list(ExecutionRecord.objects.all())
+    # Asigna el tipo "script"
+    for record in script_records:
+        record.record_type = 'script'
+    
+    # Obtén los registros de ejecución de bloques personalizados
     bloque_records = list(BloqueEjecucionRecord.objects.all())
+    # Asigna el tipo "bloque"
+    for record in bloque_records:
+        record.record_type = 'bloque'
+    
+    # Combina ambas listas
     combined = script_records + bloque_records
-    # Ordenar por fecha de inicio descendente (ambos modelos tienen el campo "inicio")
-    combined.sort(key=lambda x: x.inicio, reverse=True)
+    # Ordena la lista combinada por el campo 'inicio' en orden descendente
+    combined.sort(key=lambda record: record.inicio, reverse=True)
+    
+    # Configura la paginación: 20 registros por página
+    paginator = Paginator(combined, 20)
+    page = request.GET.get('page')
+    try:
+        records = paginator.page(page)
+    except PageNotAnInteger:
+        records = paginator.page(1)
+    except EmptyPage:
+        records = paginator.page(paginator.num_pages)
+    
     context = {
-        'records': combined,
+        'records': records,
     }
     return render(request, 'scripts/history.html', context)
+
+
+
+
 
 
 def toggle_execution(request):
