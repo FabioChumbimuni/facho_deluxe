@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Agregar Script</title>
+</head>
+<body>
+    <h1>Agregar Script</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Guardar Script</button>
+    </form>
+    <p><a href="{% url 'dashboard' %}">Volver al Dashboard</a></p>
+</body>
+</html>

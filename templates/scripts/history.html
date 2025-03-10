@@ -1,0 +1,106 @@
+{% load hasattr_filter %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Historial</title>
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Mono" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ccc;
+            font-family: 'Roboto Mono', monospace;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #66ccff;
+            margin-bottom: 20px;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #333;
+            text-align: left;
+        }
+        th {
+            background-color: #2a2a2a;
+            color: #66ccff;
+        }
+        tr:nth-child(even) {
+            background-color: #2a2a2a;
+        }
+        tr:nth-child(odd) {
+            background-color: #1a1a1a;
+        }
+        a.btn-back {
+            display: inline-block;
+            background-color: #333;
+            color: #66ccff;
+            padding: 10px 20px;
+            text-decoration: none;
+            border: 1px solid #66ccff;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        a.btn-back:hover {
+            background-color: #66ccff;
+            color: #1a1a1a;
+        }
+    </style>
+</head>
+<body>
+    <h1>HISTORIAL</h1>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Título</th>
+                    <th>Script / Bloque</th>
+                    <th>INICIO</th>
+                    <th>FINAL</th>
+                    <th>RESULTADO</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                <tr>
+                    {% if record|hasattr:"script" %}
+                        <!-- Es un ExecutionRecord -->
+                        <td>{{ record.script.titulo }}</td>
+                        <td>{{ record.script.archivo }}</td>
+                    {% elif record|hasattr:"bloque" %}
+                        <!-- Es un BloqueEjecucionRecord -->
+                        <td>{{ record.bloque.nombre }}</td>
+                        <td>Bloque</td>
+                    {% else %}
+                        <td>--</td>
+                        <td>--</td>
+                    {% endif %}
+                    <td>{{ record.inicio|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if record.fin %}
+                            {{ record.fin|date:"Y-m-d H:i" }}
+                        {% else %}
+                            --
+                        {% endif %}
+                    </td>
+                    <td>{{ record.estado }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">No hay registros.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <a href="{% url 'dashboard' %}" class="btn-back">Volver al Dashboard</a>
+</body>
+</html>
