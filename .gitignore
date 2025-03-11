@@ -3,6 +3,9 @@ db.sqlite3
 celerybeat-schedule
 celerybeat-schedule.lock
 
+# Ignorar scripts en OLT
+OLT/scriptsonu/
+
 # Ignorar archivos de caché y temporales
 __pycache__/
 *.pyc
@@ -16,3 +19,4 @@ venv/
 # Ignorar configuraciones locales y secretos
 *.env
 .env
+
