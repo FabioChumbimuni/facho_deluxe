@@ -1,0 +1,18 @@
+# Ignorar base de datos y archivos de Celery
+db.sqlite3
+celerybeat-schedule
+celerybeat-schedule.lock
+
+# Ignorar archivos de caché y temporales
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+# Ignorar entornos virtuales
+env/
+venv/
+
+# Ignorar configuraciones locales y secretos
+*.env
+.env
