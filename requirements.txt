@@ -1,7 +1,9 @@
-Django>=3.2
+Django>=3.2,<4.0
 django-q
 gunicorn
 whitenoise
 psycopg2-binary  # Si usas PostgreSQL
 mysqlclient  # Si usas MySQL
 djangorestframework  # Si usas Django REST Framework
+celery
+redis

@@ -22,7 +22,10 @@ class Script(models.Model):
         choices=TIPO_CHOICES,
         verbose_name="Tipo de Script"
     )
-
+    ejecucion_automatica = models.BooleanField(
+        default=True,
+        verbose_name="Ejecutar automáticamente"
+    )
     def __str__(self):
         return f"{self.titulo} ({self.tipo})"
 
