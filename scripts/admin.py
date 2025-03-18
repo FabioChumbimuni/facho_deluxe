@@ -1,5 +1,9 @@
 from django.contrib import admin
 from django import forms
+from django.urls import reverse
+
+from django.utils.html import format_html
+
 from django.conf import settings
 import os
 from .models import (
@@ -37,12 +41,24 @@ class ScriptAdminForm(forms.ModelForm):
             choices = []
         self.fields['archivo'] = forms.ChoiceField(choices=choices, label="Script")
 
+
+
 @admin.register(Script)
 class ScriptAdmin(admin.ModelAdmin):
     form = ScriptAdminForm
-    list_display = ('titulo', 'archivo', 'tipo', 'ejecucion_automatica')
+    list_display = ('titulo', 'archivo', 'tipo', 'ejecucion_automatica', 'ejecutar_script')
     list_filter = ('tipo', 'ejecucion_automatica')
     search_fields = ('titulo', 'archivo', 'tipo')
+    
+    def ejecutar_script(self, obj):
+            url = reverse('ejecutar_script', args=[obj.id])
+            return format_html('<a class="button" href="{}" style="background: #28a745; color: white; padding: 5px 10px; text-decoration: none; border-radius: 5px;">Ejecutar</a>', url)
+    ejecutar_script.short_description = "Acción"  # Nombre de la columna en el admin
+
+
+
+
+
 
 @admin.register(ExecutionRecord)
 class ExecutionRecordAdmin(admin.ModelAdmin):

@@ -5,4 +5,6 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('scripts.urls')),  # Se delega la gestión de rutas a la app scripts
+    path('scripts/', include('scripts.urls')),  # Asegúrate de que esta línea está presente
+
 ]

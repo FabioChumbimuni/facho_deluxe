@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-5zytf-@q(bx0^2k_4(g#0wh4kajud0ztawx5+5bw*+q4d^w6%u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['10.80.80.73']
+ALLOWED_HOSTS = ['192.168.18.202']
 
 
 # Application definition
@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django_q',
     'scripts',
+    'dbbackup',
 ]
 
 MIDDLEWARE = [
@@ -72,6 +73,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'facho.wsgi.application'
+SESSION_COOKIE_SECURE = False
 
 
 # Database
@@ -79,9 +81,12 @@ WSGI_APPLICATION = 'facho.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        # Se utiliza el objeto Path para la ruta de la base de datos
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'fiberprodata',
+        'USER': 'fiberproadmin',
+        'PASSWORD': 'noc12363',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
     }
 }
 
@@ -161,3 +166,9 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(),  # Se ejecuta cada minuto
     },
 }
+DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
+DBBACKUP_STORAGE_OPTIONS = {'location': '/home/facho/db_backups/'}
+SESSION_ENGINE = "django.contrib.sessions.backends.db"  # Usa la base de datos para sesiones
+SESSION_COOKIE_AGE = 86400  # 24 horas
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = True

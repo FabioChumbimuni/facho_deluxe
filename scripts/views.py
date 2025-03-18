@@ -1,17 +1,30 @@
 # scripts/views.py
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
-from .models import Script, ExecutionRecord, ExecutionControl, BloqueEjecucionRecord, BloqueEjecucion
-from .forms import AddScriptForm
+from django.http import HttpResponse
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.conf import settings
+import os
+import subprocess
+from datetime import datetime
+from django.contrib import messages
+from .models import Script, ExecutionRecord
+
+from .models import (
+    Script,
+    ExecutionRecord,
+    ExecutionControl,
+    BloqueEjecucion,
+    BloqueEjecucionRecord
+)
+from .forms import AddScriptForm
+from .tasks import ejecutar_script as ejecutar_script_task
 
 def index(request):
     return redirect('dashboard')
 
-from .models import Script, ExecutionRecord, ExecutionControl, BloqueEjecucion, BloqueEjecucionRecord
-
 def dashboard(request):
-    # Scripts
+    # Procesar scripts individuales
     scripts = Script.objects.all()
     executing_count = ExecutionRecord.objects.filter(estado='en ejecución').count()
     executed_count = ExecutionRecord.objects.filter(estado='finalizado').count()
@@ -37,7 +50,7 @@ def dashboard(request):
             'color': color,
         })
     
-    # Bloques
+    # Procesar bloques personalizados
     bloques = BloqueEjecucion.objects.all()
     block_status = []
     for bloque in bloques:
@@ -47,7 +60,9 @@ def dashboard(request):
             'last_record': last_record,
         })
     
+    # Control de ejecución global
     control, _ = ExecutionControl.objects.get_or_create(id=1)
+    
     context = {
         'executing_count': executing_count,
         'executed_count': executed_count,
@@ -57,15 +72,6 @@ def dashboard(request):
         'execution_active': control.active,
     }
     return render(request, 'scripts/dashboard.html', context)
-
-
-
-
-
-
-
-
-
 
 def asignar_script(request):
     if request.method == 'POST':
@@ -87,35 +93,21 @@ def add_script(request):
         form = AddScriptForm()
     return render(request, 'scripts/add_script.html', {'form': form})
 
-# scripts/views.py
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.shortcuts import render
-from .models import ExecutionRecord, BloqueEjecucionRecord
-
 def history(request):
     """
     Vista de historial consolidado.
-    Combina ExecutionRecord y BloqueEjecucionRecord en una sola lista,
-    asigna a cada registro un atributo 'record_type' y luego pagina la lista.
+    Combina ExecutionRecord y BloqueEjecucionRecord, asigna a cada registro un atributo 'record_type'
+    y luego pagina la lista (20 registros por página).
     """
-    # Obtén los registros individuales de ejecución de scripts
     script_records = list(ExecutionRecord.objects.all())
-    # Asigna el tipo "script"
     for record in script_records:
         record.record_type = 'script'
-    
-    # Obtén los registros de ejecución de bloques personalizados
     bloque_records = list(BloqueEjecucionRecord.objects.all())
-    # Asigna el tipo "bloque"
     for record in bloque_records:
         record.record_type = 'bloque'
-    
-    # Combina ambas listas
     combined = script_records + bloque_records
-    # Ordena la lista combinada por el campo 'inicio' en orden descendente
     combined.sort(key=lambda record: record.inicio, reverse=True)
     
-    # Configura la paginación: 20 registros por página
     paginator = Paginator(combined, 20)
     page = request.GET.get('page')
     try:
@@ -130,42 +122,68 @@ def history(request):
     }
     return render(request, 'scripts/history.html', context)
 
-
-
-
-
-
 def toggle_execution(request):
     """
-    Alterna el estado de ejecución continua.
+    Alterna el estado de ejecución global.
     """
     control, created = ExecutionControl.objects.get_or_create(id=1)
     control.active = not control.active
     control.save()
     return redirect('dashboard')
 
-
-
-
-
-
-
-# scripts/views.py (agrega al final)
-from django.http import HttpResponse
-from .tasks import ejecutar_script  # O una función para ejecutar todos los scripts de un bloque
-
 def ejecutar_bloque_manual(request, bloque_id):
     """
     Vista para ejecutar manualmente un bloque personalizado.
-    Esta vista dispara la ejecución de todos los scripts del bloque indicado.
+    Dispara la ejecución de cada script asignado al bloque, en orden de prioridad.
     """
-    from .models import BloqueEjecucion
     try:
         bloque = BloqueEjecucion.objects.get(id=bloque_id)
-        # Por ejemplo, enviar una tarea para cada script del bloque:
-        for script in bloque.scripts.all():
-            ejecutar_script.delay(script.id)
-        # Puedes registrar también un BloqueEjecucionRecord si lo deseas.
+        # Ordenar scripts del bloque según prioridad
+        prioridad = {'principal': 1, 'modo': 2, 'secundario': 3}
+        scripts_list = list(bloque.scripts.all())
+        ordered_scripts = sorted(scripts_list, key=lambda s: prioridad.get(s.tipo, 99))
+        for script in ordered_scripts:
+            ejecutar_script_task.delay(script.id)
         return HttpResponse("Bloque ejecutado manualmente.")
     except BloqueEjecucion.DoesNotExist:
         return HttpResponse("Bloque no encontrado.", status=404)
+
+def ejecutar_script(request, script_id):
+    script = get_object_or_404(Script, id=script_id)
+    script_path = os.path.join(settings.BASE_DIR, 'OLT', 'scriptsonu', script.archivo)
+
+    # Verificar que el archivo exista
+    if not os.path.exists(script_path):
+        messages.error(request, f"Error: El script '{script.archivo}' no existe.")
+        return redirect(request.META.get('HTTP_REFERER', '/admin/'))
+
+    # Registrar inicio de la ejecución
+    execution_record = ExecutionRecord.objects.create(
+        script=script,
+        inicio=timezone.now(),
+        estado='en ejecución'
+    )
+
+    try:
+        # Ejecutar el script en un proceso separado
+        resultado = subprocess.run(['bash', script_path], capture_output=True, text=True)
+
+        # Actualizar registro en la base de datos según el resultado
+        execution_record.fin = timezone.now()
+        execution_record.salida = resultado.stdout if resultado.stdout else 'Sin salida'
+        execution_record.estado = 'finalizado' if resultado.returncode == 0 else 'error'
+        execution_record.save()
+
+        if resultado.returncode == 0:
+            messages.success(request, f"Script '{script.titulo}' ejecutado correctamente.")
+        else:
+            messages.error(request, f"Error al ejecutar el script: {resultado.stderr}")
+
+    except Exception as e:
+        execution_record.fin = timezone.now()
+        execution_record.estado = 'error'
+        execution_record.salida = str(e)
+        execution_record.save()
+        messages.error(request, f"Error inesperado: {str(e)}")
+
+    return redirect(request.META.get('HTTP_REFERER', '/admin/'))
