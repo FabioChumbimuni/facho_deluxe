@@ -1,5 +1,5 @@
-# scripts/models.py
 from django.db import models
+from django.utils.timezone import now
 
 class Script(models.Model):
     TIPO_CHOICES = (
@@ -26,6 +26,7 @@ class Script(models.Model):
         default=True,
         verbose_name="Ejecutar automáticamente"
     )
+
     def __str__(self):
         return f"{self.titulo} ({self.tipo})"
 
@@ -36,6 +37,7 @@ class ExecutionRecord(models.Model):
     fin = models.DateTimeField(null=True, blank=True)
     estado = models.CharField(max_length=20, default="pendiente")
     log = models.TextField(blank=True, null=True)
+    salida = models.TextField(blank=True, null=True)  # Campo para guardar la salida del script
 
     def __str__(self):
         return f"Ejecución de {self.script.titulo} iniciada el {self.inicio}"
@@ -81,3 +83,23 @@ class BloqueEjecucionRecord(models.Model):
 
     def __str__(self):
         return f"Ejecución de {self.bloque.nombre} iniciada el {self.inicio}"
+
+
+class OnuDatos(models.Model):
+    id = models.AutoField(primary_key=True)
+    host = models.CharField(max_length=100)
+    snmpindex = models.CharField(max_length=100)
+    snmpindexonu = models.CharField(max_length=50, unique=True)
+    slotportonu = models.CharField(max_length=30)
+    onudesc = models.CharField(max_length=255)
+    serialonu = models.CharField(max_length=50)
+    fecha = models.DateTimeField(auto_now_add=True)
+    onulogico = models.IntegerField()
+    act_susp = models.CharField(max_length=10)
+
+    class Meta:
+        managed = False  # Evita que Django intente modificar la tabla existente
+        db_table = 'onu_datos'  # Nombre exacto de la tabla en PostgreSQL
+
+    def __str__(self):
+        return f"{self.host} - {self.serialonu}"
