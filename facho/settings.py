@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django_q',
     'scripts',
-    'dbbackup',
 ]
 
 MIDDLEWARE = [
