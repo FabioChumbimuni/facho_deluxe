@@ -7,3 +7,5 @@ mysqlclient  # Si usas MySQL
 djangorestframework  # Si usas Django REST Framework
 celery
 redis
+pyasn1<0.5            # serie 0.4.x que expone compat.octets
+pysnmp<5              # serie 4.x, compatible con hlapi clásico

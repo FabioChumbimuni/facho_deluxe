@@ -1,0 +1,66 @@
+<!-- snmp_scheduler/templates/snmp_scheduler/crear_tarea.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Crear Nueva Tarea SNMP</h2>
+    <form method="post">
+        {% csrf_token %}
+        <div class="card mb-3">
+            <div class="card-header bg-primary text-white">Configuración Básica</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        {{ form.nombre.label_tag }}
+                        {{ form.nombre }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.host_name.label_tag }}
+                        {{ form.host_name }}
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        {{ form.host_ip.label_tag }}
+                        {{ form.host_ip }}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.comunidad.label_tag }}
+                        {{ form.comunidad }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header bg-info text-white">Configuración SNMP</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        {{ form.tipo.label_tag }}
+                        {{ form.tipo }}
+                    </div>
+                    <div class="col-md-4">
+                        {{ form.intervalo.label_tag }}
+                        {{ form.intervalo }}
+                    </div>
+                    <div class="col-md-4">
+                        {{ form.modo.label_tag }}
+                        {{ form.modo }}
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        {{ form.oid_consulta.label_tag }}
+                        {{ form.oid_consulta }}
+                        <small class="form-text text-muted">{{ form.oid_consulta.help_text }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-success">Guardar Tarea</button>
+        <a href="{% url 'lista_tareas' %}" class="btn btn-secondary">Cancelar</a>
+    </form>
+</div>
+{% endblock %}

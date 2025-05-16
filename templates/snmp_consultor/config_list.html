@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>HUAWE SNMP V2</h1>
+<a href="{% url 'snmp_consultor:config_create' %}">Nueva Configuración</a>
+<table>
+  <thead>
+    <tr>
+      <th>OLT</th><th>Comunidad</th><th>Tipo</th>
+      <th>Consulta</th><th>Intervalos</th><th>Prioridad</th>
+      <th>Activo</th><th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cfg in configs %}
+    <tr>
+      <td>{{ cfg.olt_ip }}</td>
+      <td>{{ cfg.comunidad }}</td>
+      <td>{{ cfg.get_tipo_display }}</td>
+      <td>{{ cfg.get_consulta_display }}</td>
+      <td>{{ cfg.intervalos|join:", " }}</td>
+      <td>{{ cfg.get_prioridad_display }}</td>
+      <td>{{ cfg.activo }}</td>
+      <td>
+        <a href="{% url 'snmp_consultor:config_edit' cfg.id %}">✏️</a>
+        <a href="{% url 'snmp_consultor:config_toggle' cfg.id %}">🔀</a>
+        <a href="{% url 'snmp_consultor:config_run' cfg.id %}">▶️</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

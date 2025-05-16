@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-5zytf-@q(bx0^2k_4(g#0wh4kajud0ztawx5+5bw*+q4d^w6%u
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.18.202']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -39,6 +39,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django_q',
     'scripts',
+    'snmp_scheduler.apps.SnmpSchedulerConfig',
+    'django_celery_beat',
+    'django_celery_results'
 ]
 
 MIDDLEWARE = [
@@ -147,14 +150,89 @@ Q_CLUSTER = {
     'orm': 'default',  # Comentar esta línea si se usa Redis y descomentar la siguiente:
     # 'django_redis': 'default',
 }
+from celery.schedules import crontab
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_RESULT_BACKEND = 'django-db'
+CELERY_TIMEZONE = 'America/Bogota'  # Ajustar según zona horaria
+CELERY_BEAT_SCHEDULE = {
+    'snmp-discovery': {
+        'task': 'snmp_scheduler.tasks.ejecutar_descubrimiento',
+        'schedule': crontab(minute='*/15'),
+        'options': {'queue': 'snmp'}
+    }
+}
 
-from celery.schedules import crontab
+CELERY_TASK_ROUTES = {
+    'scripts.tasks.*': {'queue': 'principal'},
+    'snmp_consultor.tasks.*_principal': {'queue': 'principal'},
+    'snmp_consultor.tasks.*_secundario': {'queue': 'secundario'},
+    'snmp_consultor.tasks.*_modo': {'queue': 'modo'},
+}
+ELERY_TASK_SOFT_TIME_LIMIT = 60  # 1 minuto para scripts
+CELERY_WORKER_PREFETCH_MULTIPLIER = 4  # Balance entre rendimiento y consumo de memoria
 
+# Tiempos específicos para SNMP
+CELERY_TASK_ANNOTATIONS = {
+    'snmp_consultor.tasks.*': {
+        'soft_time_limit': 65,  # 1 minuto + 5 segundos de gracia
+        'time_limit': 70
+    }
+}
+
+CELERY_BEAT_SCHEDULE = {
+    # Tarea existente para scripts (cada hora en punto)
+    'ejecutar-ciclo-scripts-cada-hora': {
+        'task': 'scripts.tasks.ejecutar_ciclo_scripts',
+        'schedule': crontab(minute=0, hour='*'),  # Ej: 12:00, 13:00, etc.
+        'options': {'queue': 'principal'}
+    },
+
+    # Tarea existente para bloques programados (cada minuto)
+    'ejecutar-bloques-programados-cada-minuto': {
+        'task': 'scripts.tasks.ejecutar_bloques_programados',
+        'schedule': crontab(minute='*/5'),  # Cada minuto (0,1,2...59)
+        'options': {'queue': 'principal'}
+    },
+
+    # Tarea SNMP unificada (cada 15 minutos)
+    'tareas-snmp-programadas': {
+        'task': 'snmp_scheduler.tasks.ejecutar_tareas_programadas',
+        'schedule': crontab(minute='*/15'),  # :00, :15, :30, :45
+        'options': {'queue': 'principal'}
+    }
+}
+  
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'snmp_format': {
+            'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        }
+    },
+    'handlers': {
+        'snmp_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'snmp_tasks.log'),  # Cambiar esta línea
+            'formatter': 'snmp_format',
+            'maxBytes': 10*1024*1024,  # 10 MB
+            'backupCount': 5
+        },
+    },
+    'loggers': {
+        'snmp_consultor': {
+            'handlers': ['snmp_file'],
+            'level': 'INFO',
+            'propagate': False
+        }
+    }
+}
 CELERY_BEAT_SCHEDULE = {
     'ejecutar-ciclo-scripts-cada-hora': {
         'task': 'scripts.tasks.ejecutar_ciclo_scripts',
@@ -163,6 +241,25 @@ CELERY_BEAT_SCHEDULE = {
     'ejecutar-bloques-programados-cada-minuto': {
         'task': 'scripts.tasks.ejecutar_bloques_programados',
         'schedule': crontab(),  # Se ejecuta cada minuto
+    },
+    'descubrimiento-principal-cada-hora': {
+        'task': 'snmp_consultor.tasks.tarea_descubrimiento_principal',
+        'schedule': crontab(minute=0),  # Cada hora en el minuto 0 (00)
+    },
+    'consulta-secundaria-15-min': {
+        'task': 'snmp_consultor.tasks.tarea_consulta_secundaria',
+        'schedule': crontab(minute=15),  # Cada hora en el minuto 15
+        'args': ('15',)
+    },
+    'consulta-secundaria-30-min': {
+        'task': 'snmp_consultor.tasks.tarea_consulta_secundaria',
+        'schedule': crontab(minute=30),  # Cada hora en el minuto 30
+        'args': ('30',)
+    },
+    'consulta-secundaria-45-min': {
+        'task': 'snmp_consultor.tasks.tarea_consulta_secundaria',
+        'schedule': crontab(minute=45),  # Cada hora en el minuto 45
+        'args': ('45',)
     },
 }
 DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'

@@ -1,0 +1,69 @@
+{# snmp_consultor/templates/snmp_consultor/consultor_snmp.html #}
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto p-6">
+  <h1 class="text-2xl font-bold mb-4">HUAWE SNMP V2</h1>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <div>
+        {{ form.ip_olt.label_tag }}
+        {{ form.ip_olt }}
+      </div>
+
+      <div>
+        {{ form.comunidad.label_tag }}
+        {{ form.comunidad }}
+      </div>
+
+      <div>
+        {{ form.tipo.label_tag }}
+        {{ form.tipo }}
+      </div>
+
+      <div id="consulta-field" class="hidden">
+        {{ form.consulta.label_tag }}
+        {{ form.consulta }}
+      </div>
+
+      <div>
+        {{ form.intervalo_principal.label_tag }}
+        {{ form.intervalo_principal }}
+      </div>
+
+      <div>
+        {{ form.intervalo_secundario.label_tag }}
+        {{ form.intervalo_secundario }}
+      </div>
+
+    </div>
+
+    <div class="mt-6">
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">
+        Ejecutar
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const tipoSelect = document.getElementById('id_tipo');
+    const consultaDiv = document.getElementById('consulta-field');
+
+    function toggleConsulta() {
+      if (tipoSelect.value === 'Datos') {
+        consultaDiv.classList.remove('hidden');
+      } else {
+        consultaDiv.classList.add('hidden');
+      }
+    }
+
+    tipoSelect.addEventListener('change', toggleConsulta);
+    // Al cargar la página
+    toggleConsulta();
+  });
+</script>
+{% endblock %}
