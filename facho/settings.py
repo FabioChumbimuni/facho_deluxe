@@ -233,35 +233,7 @@ LOGGING = {
         }
     }
 }
-CELERY_BEAT_SCHEDULE = {
-    'ejecutar-ciclo-scripts-cada-hora': {
-        'task': 'scripts.tasks.ejecutar_ciclo_scripts',
-        'schedule': crontab(minute=0, hour='*'),
-    },
-    'ejecutar-bloques-programados-cada-minuto': {
-        'task': 'scripts.tasks.ejecutar_bloques_programados',
-        'schedule': crontab(),  # Se ejecuta cada minuto
-    },
-    'descubrimiento-principal-cada-hora': {
-        'task': 'snmp_consultor.tasks.tarea_descubrimiento_principal',
-        'schedule': crontab(minute=0),  # Cada hora en el minuto 0 (00)
-    },
-    'consulta-secundaria-15-min': {
-        'task': 'snmp_consultor.tasks.tarea_consulta_secundaria',
-        'schedule': crontab(minute=15),  # Cada hora en el minuto 15
-        'args': ('15',)
-    },
-    'consulta-secundaria-30-min': {
-        'task': 'snmp_consultor.tasks.tarea_consulta_secundaria',
-        'schedule': crontab(minute=30),  # Cada hora en el minuto 30
-        'args': ('30',)
-    },
-    'consulta-secundaria-45-min': {
-        'task': 'snmp_consultor.tasks.tarea_consulta_secundaria',
-        'schedule': crontab(minute=45),  # Cada hora en el minuto 45
-        'args': ('45',)
-    },
-}
+
 DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
 DBBACKUP_STORAGE_OPTIONS = {'location': '/home/facho/db_backups/'}
 SESSION_ENGINE = "django.contrib.sessions.backends.db"  # Usa la base de datos para sesiones

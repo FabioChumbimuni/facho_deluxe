@@ -7,7 +7,7 @@ import json
 @receiver(post_save, sender=TareaSNMP)
 def crear_tarea_periodica(sender, instance, created, **kwargs):
     schedule, _ = IntervalSchedule.objects.get_or_create(
-        every=instance.intervalo,
+        every=int(instance.intervalo),
         period=IntervalSchedule.MINUTES
     )
     

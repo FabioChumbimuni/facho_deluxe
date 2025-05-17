@@ -1,51 +1,86 @@
-# snmp_scheduler/admin.py (Versión Corregida)
+# snmp_scheduler/admin.py (Versión Final Funcional)
 from django.contrib import admin
 from django.urls import path
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from .models import TareaSNMP, EjecucionTareaSNMP 
+from .models import TareaSNMP, EjecucionTareaSNMP
 from .tasks import ejecutar_descubrimiento
 
-# admin.py
-class EjecucionTareaSNMPInline(admin.TabularInline):
+# ==============================================
+# INLINE PARA EJECUCIONES EN TAREA (CORREGIDO)
+# ==============================================
+class EjecucionTareaSNMPInline(admin.TabularInline):  # Nombre corregido
     model = EjecucionTareaSNMP
     extra = 0
     readonly_fields = ('inicio', 'fin', 'estado', 'resultado', 'error')
     can_delete = False
 
-
+# ==============================================
+# ADMIN PARA TAREAS SNMP (CORREGIDO)
+# ==============================================
 @admin.register(TareaSNMP)
 class TareaSNMPAdmin(admin.ModelAdmin):
-    inlines = [EjecucionTareaSNMPInline]
-    # 1. Primero definir el método ejecutar_tarea
-    def ejecutar_tarea(self, request, object_id):
-        ejecutar_descubrimiento.delay(object_id)
-        self.message_user(request, "Tarea enviada a la cola de ejecución")
-        return HttpResponseRedirect(
-            reverse('admin:snmp_scheduler_tareasnmp_change', args=[object_id]))
-    
-    # 2. Luego definir get_urls que lo usa
+    inlines = [EjecucionTareaSNMPInline]  # Usa el inline corregido
+    fields = ['nombre', 'host_name', 'host_ip', 'comunidad', 'tipo', 'intervalo', 'modo', 'activa']
+    list_display = [
+        'nombre', 
+        'host_ip', 
+        'tipo', 
+        'activa', 
+        'ultima_ejecucion', 
+        'ejecuciones_recientes',
+        'estado_actual'
+    ]
+    list_filter = ('tipo', 'intervalo', 'activa')
+    search_fields = ('nombre', 'host_ip')
+    actions = ['ejecutar_ahora']
+    change_form_template = "admin/snmp_scheduler/tareasnmp/change_form.html"
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
             path(
                 '<path:object_id>/ejecutar/',
                 self.admin_site.admin_view(self.ejecutar_tarea),
-                name='snmp_scheduler_tareasnmp_ejecutar_tarea'  # Nombre único completo
+                name='ejecutar_tarea'
             ),
         ]
         return custom_urls + urls
-    
-    # 3. Resto de la configuración
-    actions = ['ejecutar_ahora']
-    fields = ['nombre', 'host_name', 'host_ip', 'comunidad', 'tipo', 'intervalo', 'modo', 'activa']
-    list_display = ['nombre', 'host_ip', 'tipo', 'intervalo', 'activa']
+
+    def ejecutar_tarea(self, request, object_id):
+        ejecutar_descubrimiento.apply_async(
+            args=[object_id],
+            queue='secundario'  # Asegurar que coincida con la cola configurada
+        )
+        self.message_user(request, "✅ Tarea enviada a la cola de ejecución")
+        return HttpResponseRedirect(
+            reverse('admin:snmp_scheduler_tareasnmp_change', args=[object_id]))
 
     def ejecutar_ahora(self, request, queryset):
         for tarea in queryset:
-            ejecutar_descubrimiento.delay(tarea.id)
-        self.message_user(request, f"{queryset.count()} tareas encoladas")
-    ejecutar_ahora.short_description = "🗸 Ejecutar selección ahora"
+            ejecutar_tarea_snmp.apply_async(args=[tarea.id])
+        self.message_user(request, f"🚀 {queryset.count()} tareas encoladas")
+    ejecutar_ahora.short_description = "Ejecutar selección ahora"
 
-    # Cambiar la línea del template
-    change_form_template = "admin/snmp_scheduler/tareasnmp/change_form.html"
+    def estado_actual(self, obj):
+        ultima = obj.ejecuciones.first()
+        return ultima.estado if ultima else '--'
+    estado_actual.short_description = 'Último Estado'
+    
+    def ejecuciones_recientes(self, obj):
+        return obj.ejecuciones.order_by('-inicio')[:5].count()
+    ejecuciones_recientes.short_description = 'Ejec. Recientes (24h)'
+
+# ==============================================
+# ADMIN PARA HISTORIAL (VERSIÓN CORREGIDA)
+# ==============================================
+@admin.register(EjecucionTareaSNMP)
+class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
+    list_display = ('tarea', 'inicio', 'fin', 'estado', 'duracion')
+    list_filter = ('estado', 'tarea__host_ip')
+    search_fields = ('tarea__nombre', 'error')
+    readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
+    
+    def duracion(self, obj):
+        return obj.fin - obj.inicio if obj.fin else 'En curso'
+    duracion.short_description = 'Duración'
