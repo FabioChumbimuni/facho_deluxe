@@ -4,7 +4,9 @@ from django.urls import path
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from .models import TareaSNMP, EjecucionTareaSNMP
-from .tasks import ejecutar_descubrimiento
+from .tasks.handlers import TASK_HANDLERS
+from .tasks import ejecutar_descubrimiento, ejecutar_tarea_snmp
+from .tasks.delete import delete_history_records
 
 # ==============================================
 # INLINE PARA EJECUCIONES EN TAREA (CORREGIDO)
@@ -87,7 +89,21 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
     list_filter = ('estado', 'tarea__host_ip')
     search_fields = ('tarea__nombre', 'error')
     readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
-    
+    actions = ['borrar_seleccion_async']
     def duracion(self, obj):
         return obj.fin - obj.inicio if obj.fin else 'En curso'
     duracion.short_description = 'Duración'
+
+    def borrar_seleccion_async(self, request, queryset):
+            """Encola el borrado en background sin bloquear el Admin."""
+            ids = list(queryset.values_list('pk', flat=True))
+            delete_history_records.delay(ids)
+            self.message_user(
+                request,
+                f"🗑️ {len(ids)} registros programados para borrado en segundo plano"
+            )
+    borrar_seleccion_async.short_description = "Borrar historial seleccionado (Async)"
+
+
+
+    
