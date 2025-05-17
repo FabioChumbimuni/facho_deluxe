@@ -168,7 +168,10 @@ def ejecutar_tareas_programadas():
         Q(ultima_ejecucion__isnull=True)
     )
 
-    for tarea in tareas:
+    modo_orden = {'PRINCIPAL': 0, 'MODO': 1, 'SECUNDARIO': 2}
+    tareas_ordenadas = sorted(tareas, key=lambda t: modo_orden.get(t.modo, 3))
+
+    for tarea in tareas_ordenadas:
         if tarea.tipo == 'descubrimiento':
             ejecutar_descubrimiento.apply_async(
                 args=[tarea.id],

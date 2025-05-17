@@ -23,15 +23,22 @@ class TareaSNMPAdmin(admin.ModelAdmin):
     inlines = [EjecucionTareaSNMPInline]  # Usa el inline corregido
     fields = ['nombre', 'host_name', 'host_ip', 'comunidad', 'tipo', 'intervalo', 'modo', 'activa']
     list_display = [
-        'nombre', 
-        'host_ip', 
-        'tipo', 
-        'activa', 
-        'ultima_ejecucion', 
+        'nombre',
+        'host_ip',
+        'tipo',
+        'intervalo',      # ← agregamos Intervalo
+        'modo',           # ← agregamos Modo
+        'activa',
+        'ultima_ejecucion',
         'ejecuciones_recientes',
-        'estado_actual'
+        'estado_actual',
     ]
-    list_filter = ('tipo', 'intervalo', 'activa')
+    list_filter = (
+        'tipo',
+        'intervalo',      # ← para filtrar por intervalo
+        'modo',           # ← para filtrar por modo
+        'activa'
+    )
     search_fields = ('nombre', 'host_ip')
     actions = ['ejecutar_ahora']
     change_form_template = "admin/snmp_scheduler/tareasnmp/change_form.html"
@@ -52,7 +59,7 @@ class TareaSNMPAdmin(admin.ModelAdmin):
             args=[object_id],
             queue='secundario'  # Asegurar que coincida con la cola configurada
         )
-        self.message_user(request, "✅ Tarea enviada a la cola de ejecución")
+        self.message_user(request, "Tarea enviada a la cola de ejecución")
         return HttpResponseRedirect(
             reverse('admin:snmp_scheduler_tareasnmp_change', args=[object_id]))
 
