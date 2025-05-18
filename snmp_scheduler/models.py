@@ -20,6 +20,7 @@ class TareaSNMP(models.Model):
     TIPO_CHOICES = [
         ('descubrimiento', 'Descubrimiento'),
         ('datos', 'Datos'),
+        ('datos_bulk', 'Recolección Masiva de Datos'),
     ]
 
     nombre = models.CharField(max_length=100, verbose_name="Nombre de la Tarea")
@@ -57,6 +58,8 @@ class TareaSNMP(models.Model):
     def save(self, *args, **kwargs):
         if self.tipo == 'descubrimiento':
             self.oid_consulta = '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.1'
+        elif self.tipo == 'datos_bulk':  # Nuevo caso
+            self.oid_consulta = '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9'
         elif self.tipo == 'datos':
             self.oid_consulta = '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.15'
         super().save(*args, **kwargs)
@@ -70,16 +73,26 @@ class TareaSNMP(models.Model):
     def get_oid(self):
         OIDS = {
             'descubrimiento': '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.1',
-            'datos': '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.15'
+            'datos': '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.15',
+            'datos_bulk': '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9'  # Nuevo OID para bulk
+
         }
         return OIDS.get(self.tipo, '')
 
 
 class OnuDato(models.Model):
-    snmpindexonu = models.CharField(max_length=50, verbose_name="Índice SNMP")
-    host_ip = models.GenericIPAddressField(protocol='IPv4', verbose_name="IP del OLT")
-    act_susp = models.CharField(max_length=10, verbose_name="Estado ONU")
-    onudesc = models.CharField(max_length=255, blank=True, verbose_name="Descripción ONU")
+    id = models.AutoField(primary_key=True, db_column='id')  # ¡Nuevo campo!
+    host = models.CharField(max_length=100, db_column='host')  # Antes host_ip
+    snmpindex = models.CharField(max_length=100, db_column='snmpindex')
+    snmpindexonu = models.CharField(max_length=50, db_column='snmpindexonu')
+    slotportonu = models.CharField(max_length=30, db_column='slotportonu')
+    onulogico = models.IntegerField(db_column='onulogico')
+    onudesc = models.CharField(max_length=255, db_column='onudesc')  # Campo objetivo
+    serialonu = models.CharField(max_length=50, db_column='serialonu')
+    act_susp = models.CharField(max_length=10, db_column='act_susp')
+    fecha = models.DateTimeField(db_column='fecha')
+    enviar = models.BooleanField(default=False, db_column='enviar')
+    host_name = models.CharField(max_length=50, db_column='host_name')
 
     class Meta:
         managed = False  # Usa una tabla existente
