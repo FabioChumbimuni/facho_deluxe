@@ -5,7 +5,7 @@
 {% block object-tools-items %}
     {{ block.super }}
     <li>
-        <a href="{% url 'admin:ejecutar_tarea' original.pk|admin_urlquote %}" 
+        <a href="{% url 'admin:snmp_scheduler_tareasnmp_ejecutar' original.pk|admin_urlquote %}"
            class="historylink"
            style="background-color: #4CAF50; color: white; padding: 8px 12px; border-radius: 4px; text-decoration: none;">
             🚀 Ejecutar Ahora
