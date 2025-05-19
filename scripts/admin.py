@@ -95,6 +95,6 @@ class BloqueEjecucionRecordAdmin(admin.ModelAdmin):
 
 @admin.register(OnuDatos)
 class OnuDatosAdmin(admin.ModelAdmin):
-    list_display = ('host', 'snmpindex', 'onudesc', 'serialonu', 'fecha', 'onulogico', 'act_susp')
-    list_filter = ('host',)
-    search_fields = ('host', 'snmpindex', 'serialonu', 'onudesc')
+    list_display = ('host', 'slotportonu','onulogico', 'onudesc', 'act_susp')
+    list_filter = ('host','act_susp')
+    search_fields = ('host', 'slotportonu', 'serialonu', 'onudesc')

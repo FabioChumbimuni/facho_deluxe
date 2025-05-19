@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import os
 from celery import Celery
 from celery.schedules import crontab
-
 # Establecer la configuración de Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'facho.settings')
 
@@ -39,6 +38,14 @@ app.conf.beat_schedule = {
         'options': {'queue': 'secundario'},
     }
 }
+
+app.conf.beat_schedule.update({
+    'actualizar-onu-meta-cada-10-min': {
+        'task': 'snmp_scheduler.tasks.update_onu_meta',
+        'schedule': crontab(minute='*/10'),
+        'options': {'queue': 'principal'},
+    },
+})
 
 # Descubrir automáticamente las tareas en las apps registradas
 app.autodiscover_tasks()
