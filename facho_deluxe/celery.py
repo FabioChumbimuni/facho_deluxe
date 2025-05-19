@@ -1,12 +1,12 @@
-# facho/celery.py
+# facho_deluxe/celery.py
 from __future__ import absolute_import
 import os
 from celery import Celery
 from celery.schedules import crontab
 # Establecer la configuración de Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'facho.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'facho_deluxe.settings')
 
-app = Celery('facho')
+app = Celery('facho_deluxe')
 # Leer configuración de Celery desde settings.py con prefijo CELERY_
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
