@@ -11,7 +11,7 @@ def poller_master():
     lanza un group de poller_worker y los agrupa con poller_aggregator.
     """
     # 1. Consultar tareas activas de tipo bulk y ordenarlas por modo
-    tareas = TareaSNMP.objects.filter(tipo='bulk', activo=True).order_by('modo')
+    tareas = TareaSNMP.objects.filter(tipo='bulk', activa=True).order_by('modo')
 
     for tarea in tareas:
         # 2. Registrar inicio de ejecución

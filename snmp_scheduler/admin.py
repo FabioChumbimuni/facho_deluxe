@@ -83,7 +83,7 @@ class TareaSNMPAdmin(admin.ModelAdmin):
 @admin.register(EjecucionTareaSNMP)
 class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
     list_display = ('tarea', 'inicio', 'fin', 'estado', 'duracion')
-    list_filter = ('estado', 'tarea__host_ip')
+    list_filter = ('estado', 'tarea__host_name')
     search_fields = ('tarea__nombre', 'error')
     readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
     actions = ['borrar_seleccion_async']
