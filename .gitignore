@@ -4,7 +4,8 @@ celerybeat-schedule
 celerybeat-schedule.lock
 
 # Ignorar scripts en OLT
-OLT/scriptsonu/
+OLT/scriptsonu/*
+!OLT/scriptsonu/.gitkeep
 db_backups/
 # Ignorar archivos de caché y temporales
 __pycache__/
