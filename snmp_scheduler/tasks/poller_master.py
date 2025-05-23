@@ -1,5 +1,3 @@
-# snmp_scheduler/tasks/poller_master.py
-
 import logging
 from celery import shared_task, chord
 from django.utils import timezone
@@ -19,30 +17,32 @@ def ejecutar_bulk_wrapper(self, tarea_id=None):
     """
     Envía en paralelo chunks de índices SNMP al poller_worker y luego
     invoca al poller_aggregator para consolidar resultados.
+
+    Si viene tarea_id → invocación manual (no chequea activa=True).
+    Si no viene → invocación automática (sólo tareas activas).
     """
     close_old_connections()
     ahora = timezone.localtime()
 
-    # 1) Selección de tareas: por ID o por intervalo de minuto
-    if tarea_id:
+    # 1) Selección de tareas
+    if tarea_id is not None:
+        # manual: no filtramos por activa
         try:
-            tareas = [TareaSNMP.objects.get(
-                pk=tarea_id,
-                tipo='datos_bulk',
-                activa=True
-            )]
+            tarea = TareaSNMP.objects.get(pk=tarea_id, tipo='datos_bulk')
         except TareaSNMP.DoesNotExist:
-            logger.warning(f"[master] Tarea {tarea_id} no existe o no está activa/bulk")
+            logger.warning(f"[master] Tarea {tarea_id} no existe o no es datos_bulk")
             return
+        tareas = [tarea]
     else:
+        # automático: sólo las activas en el minuto actual
         minuto = ahora.minute
-        tareas = list(TareaSNMP.objects.filter(
-            tipo='datos_bulk',
-            activa=True,
-            intervalo=minuto
-        ).order_by('modo'))
+        tareas = list(
+            TareaSNMP.objects
+                     .filter(tipo='datos_bulk', activa=True, intervalo=minuto)
+                     .order_by('modo')
+        )
 
-    # 2) Para cada tarea seleccionada
+    # 2) Para cada tarea
     for tarea in tareas:
         logger.info(f"[master] Ejecutar Ahora tarea {tarea.id}")
         ejec = EjecucionTareaSNMP.objects.create(
@@ -51,46 +51,33 @@ def ejecutar_bulk_wrapper(self, tarea_id=None):
             estado='E'
         )
 
-        # 3) Obtener todos los índices SNMP para este host
-        
-
-        onus = list(OnuDato.objects.filter(host=tarea.host_name).values_list('snmpindexonu', flat=True))
-        chunk_size = 200
-        chunks = [ onus[i:i+chunk_size] for i in range(0, len(onus), chunk_size) ]
-
-        header = [
-            poller_worker.s(tarea.id, ejec.id, chunk)
-            for chunk in chunks
-        ]
+        # 3) Leer todos los snmpindexonu existentes
+        onus = list(
+            OnuDato.objects
+                   .filter(host=tarea.host_name)
+                   .values_list('snmpindexonu', flat=True)
+        )
 
         if not onus:
-            # Nada que hacer: cerramos ejecución sin errores
             ejec.fin = timezone.now()
             ejec.estado = 'C'
             ejec.resultado = {'updated': 0, 'deleted': 0, 'errors': []}
             ejec.save()
             continue
 
-        # 4) Partir en chunks de tamaño fijo
+        # 4) Partir en chunks
         chunk_size = 200
-        chunks = [
-            onus[i:i + chunk_size]
-            for i in range(0, len(onus), chunk_size)
-        ]
+        chunks = [onus[i:i+chunk_size] for i in range(0, len(onus), chunk_size)]
         logger.info(f"[master] Tarea {tarea.id}: {len(onus)} índices → {len(chunks)} chunks")
 
-        # 5) Construir el header del chord: cada worker recibe (chunk_indices, tarea.id)
-        
+        # 5) Construir header para el chord
         header = [
             poller_worker.s(tarea.id, ejec.id, chunk)
             for chunk in chunks
         ]
-
-
-        # 6) El callback recibirá la lista de resultados + tarea.id + ejec.id
         callback = poller_aggregator.s(tarea.id, ejec.id)
 
-        # 7) Lanzamos el chord
+        # 6) Lanzar chord
         chord(header)(callback)
 
     close_old_connections()
