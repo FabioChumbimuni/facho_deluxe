@@ -26,8 +26,8 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
     close_old_connections()
 
     # 1) Carga de objetos
-    tarea = TareaSNMP.objects.get(id=tarea_id)
-    ejec  = EjecucionTareaSNMP.objects.get(id=ejecucion_id)
+    tarea = TareaSNMP.objects.get(pk=tarea_id)
+    ejec  = EjecucionTareaSNMP.objects.get(pk=ejecucion_id)
 
     # 2) Sesión SNMP
     session = Session(
@@ -36,7 +36,7 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         version=2,
         timeout=6
     )
-    base_oid = tarea.get_oid()  # e.g. '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9'
+    base_oid = tarea.get_oid()  # p.ej. '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9'
 
     # 3) Mapeo de índices a IDs de OnuDato
     recs = OnuDato.objects.filter(
@@ -59,16 +59,16 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         vars = session.get(oid_list)
     except EasySNMPError as e:
         logger.error(f"[poller_worker] SNMP error ejecución={ejecucion_id}: {e}", exc_info=True)
-        raise  # para que Celery reprograme según retry_backoff
+        # Reintentar según política de Celery
+        raise
 
     # 6) Procesar respuestas
     for var in vars:
-        # Ejemplo var.oid: 'iso.3.6.1.4.1.2011.6.128.1.1.2.43.1.9.4194312192.1'
+        # var.oid p.ej. 'iso.3.6.1.4.1.2011.6.128.1.1.2.43.1.9.4194312192.1'
         parts = var.oid.split('.')
         if len(parts) < 2:
             errors.append(f"{var.oid}: formato de OID inesperado")
             continue
-        # Tomamos las dos últimas sub-IDs para reconstruir el índice compuesto
         idx = f"{parts[-2]}.{parts[-1]}"
 
         if idx not in idx_to_id:
@@ -76,8 +76,14 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             continue
 
         onu_id = idx_to_id[idx]
-        val = var.value or ""
-        if val.lower().startswith('no such'):
+        val = (var.value or "").strip().strip('"')
+
+        # Si viene un NoSuchInstance/Object o valor vacío/nulo, borramos la fila
+        if (
+            not val
+            or 'no such' in val.lower()
+            or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT')
+        ):
             to_delete.append(onu_id)
             deleted += 1
         else:
