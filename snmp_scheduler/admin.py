@@ -85,7 +85,7 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
     )
     list_filter = ('estado', 'tarea__host_name', 'tarea__tipo')  # Filtro por tipo
     search_fields = ('tarea__nombre', 'error', 'tarea__host_ip')  # Búsqueda por IP
-
+    
     # Nuevos campos personalizados
     def nombre_tarea(self, obj):
         return obj.tarea.nombre  # Nombre de la tarea

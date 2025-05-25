@@ -94,7 +94,22 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
 
         onu_id = idx_to_id[idx]
         val = (var.value or "").strip().strip('"')
+        if campo == 'distancia_m':
+            if val == "-1":
+                val = "No Distancia"
+            else:
+                try:
+                    # Convertir a km con 3 decimales y formato europeo
+                    km = float(val) / 1000
+                    val = f"{km:.3f} km"
+                except:
+                    val = "Error formato"
 
+
+        # Luego proceder con la actualización
+        OnuDato.objects.filter(id=onu_id).update(
+            **{campo: val, 'fecha': timezone.now()}
+        )
         if not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
             to_delete.append(onu_id)
             deleted += 1
