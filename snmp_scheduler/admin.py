@@ -74,12 +74,35 @@ class TareaSNMPAdmin(admin.ModelAdmin):
 
 @admin.register(EjecucionTareaSNMP)
 class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
-    list_display = ('tarea', 'inicio', 'fin', 'estado', 'duracion')
-    list_filter = ('estado', 'tarea__host_name')
-    search_fields = ('tarea__nombre', 'error')
+    list_display = (
+        'nombre_tarea',  # 👈 Nueva columna
+        'host_ip', 
+        'tipo_tarea', 
+        'inicio', 
+        'fin', 
+        'estado', 
+        'duracion'
+    )
+    list_filter = ('estado', 'tarea__host_name', 'tarea__tipo')  # Filtro por tipo
+    search_fields = ('tarea__nombre', 'error', 'tarea__host_ip')  # Búsqueda por IP
+
+    # Nuevos campos personalizados
+    def nombre_tarea(self, obj):
+        return obj.tarea.nombre  # Nombre de la tarea
+    nombre_tarea.short_description = "Tarea"
+
+    def host_ip(self, obj):
+        return obj.tarea.host_ip  # IP del OLT
+    host_ip.short_description = "IP OLT"
+
+    def tipo_tarea(self, obj):
+        return obj.tarea.get_tipo_display()  # Tipo legible (ej. "Descripción ONU")
+    tipo_tarea.short_description = "Tipo"
+
     readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
     actions = ['borrar_seleccion_async']
-
+    def __str__(self):
+        return f"{self.tarea.nombre} ({self.inicio:%Y-%m-%d %H:%M:%S})"  # Nombre + fecha
     def duracion(self, obj):
         return obj.fin - obj.inicio if obj.fin else 'En curso'
     duracion.short_description = 'Duración'
