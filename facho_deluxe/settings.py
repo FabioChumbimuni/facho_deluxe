@@ -217,18 +217,22 @@ LOGGING = {
     },
     'handlers': {
         'snmp_file': {
-            'level': 'INFO',
+            'level': 'DEBUG',  # 👈 Cambiar de INFO a DEBUG
             'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'snmp_tasks.log'),  # Cambiar esta línea
+            'filename': os.path.join(BASE_DIR, 'logs', 'snmp_tasks.log'),
             'formatter': 'snmp_format',
-            'maxBytes': 10*1024*1024,  # 10 MB
+            'maxBytes': 10*1024*1024,
             'backupCount': 5
         },
+        'console': {  # 👈 Añadir handler para consola
+            'class': 'logging.StreamHandler',
+            'formatter': 'snmp_format',
+        }
     },
     'loggers': {
         'snmp_consultor': {
-            'handlers': ['snmp_file'],
-            'level': 'INFO',
+            'handlers': ['snmp_file', 'console'],  # 👈 Mostrar en consola y archivo
+            'level': 'DEBUG',  # 👈 Nivel DEBUG
             'propagate': False
         }
     }

@@ -8,6 +8,18 @@ from easysnmp import Session, EasySNMPError
 from ..models import OnuDato, TareaSNMP, EjecucionTareaSNMP
 from .common import logger
 
+TIPO_A_CAMPO = {
+    'descubrimiento': 'act_susp',
+    'onudesc': 'onudesc',
+    'estado_onu': 'estado_onu',
+    'last_down': 'ultima_desconexion',
+    'pot_rx': 'potencia_rx',
+    'pot_tx': 'potencia_tx', 
+    'last_down_t': 'last_down_time',
+    'distancia_m': 'distancia_m',
+    'modelo_onu': 'modelo_onu'
+}
+
 @shared_task(
     bind=True,
     name='snmp_scheduler.tasks.poller_worker',
@@ -17,95 +29,94 @@ from .common import logger
     soft_time_limit=60
 )
 def poller_worker(self, tarea_id, ejecucion_id, indices):
-    """
-    Procesa un chunk de índices SNMP para la tarea y ejecución dadas.
-    - tarea_id: PK de TareaSNMP
-    - ejecucion_id: PK de EjecucionTareaSNMP
-    - indices: lista de snmpindexonu (strings, p.ej. '4194312192.1', '4194312192.2', ...)
-    """
     close_old_connections()
 
-    # 1) Carga de objetos
     tarea = TareaSNMP.objects.get(pk=tarea_id)
     ejec  = EjecucionTareaSNMP.objects.get(pk=ejecucion_id)
 
-    # 2) Sesión SNMP
+    # Validaciones críticas PRIMERO
+    if not tarea.get_oid():
+        logger.error(f"Tarea {tarea_id} sin OID configurado")
+        return {'updated': 0, 'deleted': 0, 'errors': ["OID no configurado"], 'to_delete': []}
+        
+    campo = TIPO_A_CAMPO.get(tarea.tipo)  # 👈 Definir campo aquí
+    if not campo:
+        logger.error(f"Tipo {tarea.tipo} no tiene campo destino definido")
+        return {'updated': 0, 'deleted': 0, 'errors': ["Campo destino desconocido"], 'to_delete': []}
+
+    # Logs DEBUG después de validaciones
+    logger.debug(f"[DEBUG] OID: {tarea.get_oid()}, Campo: {campo}")
+    
+    # Configuración SNMP
     session = Session(
         hostname=tarea.host_ip,
         community=tarea.comunidad,
         version=2,
-        timeout=6
+        timeout=6,
+        retries=1
     )
-    base_oid = tarea.get_oid()  # p.ej. '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9'
 
-    # 3) Mapeo de índices a IDs de OnuDato
+    # Mapeo de índices (usar host_name según modelo)
     recs = OnuDato.objects.filter(
         host=tarea.host_name,
         snmpindexonu__in=indices
     ).values('id', 'snmpindexonu')
+    
     idx_to_id = {r['snmpindexonu']: r['id'] for r in recs}
+    logger.info(f"Mapeados {len(idx_to_id)}/{len(indices)} índices")
+
+    # Construcción y consulta OIDs
+    base_oid = tarea.get_oid()
+    oid_list = [f"{base_oid}.{idx}" for idx in indices]
+    
+    try:
+        vars = session.get(oid_list)
+    except EasySNMPError as e:
+        logger.error(f"Error SNMP: {str(e)}")
+        raise
 
     updated = deleted = 0
     errors = []
     to_delete = []
 
-    logger.info(f"[poller_worker] Inicio ejecución={ejecucion_id}, {len(indices)} índices")
-
-    # 4) Construir lista de OIDs completas
-    oid_list = [f"{base_oid}.{idx}" for idx in indices]
-
-    # 5) Hacer la consulta SNMP de golpe
-    try:
-        vars = session.get(oid_list)
-    except EasySNMPError as e:
-        logger.error(f"[poller_worker] SNMP error ejecución={ejecucion_id}: {e}", exc_info=True)
-        # Reintentar según política de Celery
-        raise
-
-    # 6) Procesar respuestas
+    # Procesar respuestas (¡Este bloque estaba en posición incorrecta!)
     for var in vars:
-        # var.oid p.ej. 'iso.3.6.1.4.1.2011.6.128.1.1.2.43.1.9.4194312192.1'
         parts = var.oid.split('.')
         if len(parts) < 2:
-            errors.append(f"{var.oid}: formato de OID inesperado")
+            errors.append(f"OID inválido: {var.oid}")
             continue
+            
         idx = f"{parts[-2]}.{parts[-1]}"
-
+        
         if idx not in idx_to_id:
-            errors.append(f"{idx}: índice no mapeado")
+            errors.append(f"Índice {idx} no existe en BD")
             continue
 
         onu_id = idx_to_id[idx]
         val = (var.value or "").strip().strip('"')
 
-        # Si viene un NoSuchInstance/Object o valor vacío/nulo, borramos la fila
-        if (
-            not val
-            or 'no such' in val.lower()
-            or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT')
-        ):
+        if not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
             to_delete.append(onu_id)
             deleted += 1
+            logger.debug(f"Borrando {onu_id} (valor inválido)")
         else:
-            # Actualizamos el onudesc con el valor obtenido
-            with transaction.atomic():
-                OnuDato.objects.filter(id=onu_id).update(
-                    onudesc=val,
-                    fecha=timezone.now()
-                )
-            updated += 1
+            try:
+                with transaction.atomic():
+                    OnuDato.objects.filter(id=onu_id).update(
+                        **{campo: val, 'fecha': timezone.now()}
+                    )
+                    updated += 1
+                    logger.debug(f"Actualizado {campo}={val} ({onu_id})")
+            except Exception as e:
+                errors.append(f"Error BD: {str(e)}")
+                logger.error(f"Fallo actualizando {onu_id}: {str(e)}")
 
-    # 7) Borrar registros inválidos de una vez
     if to_delete:
         OnuDato.objects.filter(id__in=to_delete).delete()
-        logger.debug(f"[poller_worker] Eliminados {len(to_delete)} registros inválidos")
+        logger.info(f"Eliminados {len(to_delete)} registros")
 
-    logger.info(
-        f"[poller_worker] Fin ejecución={ejecucion_id}: "
-        f"updated={updated}, deleted={deleted}, errors={len(errors)}"
-    )
+    logger.info(f"Ejecución {ejecucion_id}: {updated} act, {deleted} borr, {len(errors)} err")
 
-    # 8) Cerrar conexiones Django
     for conn in connections.all():
         conn.close()
 

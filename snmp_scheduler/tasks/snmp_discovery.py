@@ -30,7 +30,7 @@ def ejecutar_descubrimiento(self, tarea_id):
         tarea.ultima_ejecucion = timezone.now()
         tarea.save(update_fields=['ultima_ejecucion'])
 
-        # 3) Preparar sesión EasySNMP
+        # 3) Preparar sesión EasySNMP y obtener el OID base de la tarea
         session = Session(
             hostname=tarea.host_ip,
             community=tarea.comunidad,
@@ -38,7 +38,7 @@ def ejecutar_descubrimiento(self, tarea_id):
             timeout=6,
             retries=1
         )
-        base_oid = tarea.get_oid()  # p.ej. '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.1'
+        base_oid = tarea.oid_consulta 
 
         # 4) Hacer walk completo sobre el OID base
         try:

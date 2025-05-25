@@ -12,6 +12,11 @@ from .poller_master import ejecutar_bulk_wrapper
 
 logger = logging.getLogger(__name__)
 
+TIPOS_BULK = [
+    'onudesc', 'estado_onu', 'last_down', 
+    'pot_rx', 'pot_tx', 'last_down_t',
+    'distancia_m', 'modelo_onu'
+]
 
 @shared_task(name="snmp_scheduler.tasks._execute_bulk_and_next")
 def _execute_bulk_and_next(header_results, bulk_ids, modo_actual, modos_restantes):
@@ -25,7 +30,7 @@ def _execute_bulk_and_next(header_results, bulk_ids, modo_actual, modos_restante
     # 1) Encolar todos los datos_bulk de esta fase
     for tarea_id in bulk_ids:
         ejecutar_bulk_wrapper.delay(tarea_id)
-        logger.info(f"[scheduler] Encolado datos_bulk#{tarea_id} en fase '{modo_actual}'")
+        logger.info(f"[scheduler] Encolado tarea bulk#{tarea_id} ({modo_actual})")
 
     # 2) Lanzar inmediatamente la siguiente fase, si la hay
     if modos_restantes:
@@ -57,7 +62,7 @@ def _start_fase(header_results, modo_actual, modos_restantes):
     )
 
     desc_ids = [t.pk for t in qs if t.tipo == "descubrimiento"]
-    bulk_ids = [t.pk for t in qs if t.tipo == "datos_bulk"]
+    bulk_ids = [t.pk for t in qs if t.tipo in TIPOS_BULK]  # ← Cambio clave
 
     logger.info(f"[scheduler] Fase '{modo_actual}': {len(desc_ids)} discovery, {len(bulk_ids)} bulk")
 
@@ -96,7 +101,7 @@ def ejecutar_tareas_programadas():
     )
 
     desc_ids = [t.pk for t in qs if t.tipo == "descubrimiento"]
-    bulk_ids = [t.pk for t in qs if t.tipo == "datos_bulk"]
+    bulk_ids = [t.pk for t in qs if t.tipo in TIPOS_BULK]
 
     logger.info(f"[scheduler] Fase 'principal': {len(desc_ids)} discovery, {len(bulk_ids)} bulk")
 

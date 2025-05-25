@@ -6,7 +6,6 @@ from .models import TareaSNMP, EjecucionTareaSNMP
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
 
-# Inline corregido para el historial de ejecuciones
 class EjecucionTareaSNMPInline(admin.TabularInline):
     model = EjecucionTareaSNMP
     extra = 0
@@ -28,12 +27,7 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         'ejecuciones_recientes',
         'estado_actual',
     ]
-    list_filter = (
-        'tipo',
-        'intervalo',
-        'modo',
-        'activa',
-    )
+    list_filter = ('tipo', 'intervalo', 'modo', 'activa')
     search_fields = ('nombre', 'host_ip')
     actions = ['ejecutar_ahora']
     change_form_template = "admin/snmp_scheduler/tareasnmp/change_form.html"
@@ -55,7 +49,6 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         if not handler:
             self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
         else:
-            # cada handler define su propia cola internamente
             handler.apply_async(args=[object_id])
             self.message_user(request, "✅ Tarea enviada a la cola de ejecución")
         return HttpResponseRedirect(
@@ -78,7 +71,6 @@ class TareaSNMPAdmin(admin.ModelAdmin):
     def ejecuciones_recientes(self, obj):
         return obj.ejecuciones.order_by('-inicio')[:5].count()
     ejecuciones_recientes.short_description = 'Ejec. Recientes (24h)'
-
 
 @admin.register(EjecucionTareaSNMP)
 class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
