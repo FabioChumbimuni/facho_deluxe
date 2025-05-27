@@ -3,8 +3,10 @@ from django.contrib import admin
 from django.urls import path, reverse
 from django.http import HttpResponseRedirect
 from django.db import models
-from django.db.models import Q, Case, When, Value as V, FloatField
+from django.db.models import Q, Case, When, Value, FloatField, F
 from django.db.models.functions import Replace, Cast
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.aggregates import ArrayAgg
 from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
@@ -148,10 +150,12 @@ class OnuDatoAdmin(admin.ModelAdmin):
     ]
     
     search_fields = ['host', 'slotportonu', 'onudesc', 'modelo_onu']
+    list_select_related = True
+    list_per_page = 50
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.exclude(Q(host__icontains='scripts') | Q(host__icontains='Host'))
+        return qs.exclude(host__in=['scripts', 'Host'])
     
     def get_list_filter(self, request):
         class DistanceRangeFilter(admin.SimpleListFilter):
@@ -173,49 +177,46 @@ class OnuDatoAdmin(admin.ModelAdmin):
 
                 if self.value() == 'no-distance':
                     return queryset.filter(
-                        Q(distancia_m__iexact='No Distancia') |
-                        Q(distancia_m__iexact='Error formato') |
-                        Q(distancia_m__isnull=True) |
-                        Q(distancia_m='')
+                        Q(distancia_m__in=['No Distancia', 'Error formato', '']) |
+                        Q(distancia_m__isnull=True)
                     )
 
-                # Filtrar registros que tienen un valor numérico válido
+                # Filtrar registros válidos y convertir a número
                 valid_records = queryset.exclude(
-                    Q(distancia_m__iexact='No Distancia') |
-                    Q(distancia_m__iexact='Error formato') |
-                    Q(distancia_m__isnull=True) |
-                    Q(distancia_m='')
-                )
-
-                # Primero limpiamos el valor y luego lo convertimos a flotante
-                queryset = valid_records.annotate(
-                    clean_distance=Case(
-                        When(
-                            distancia_m__regex=r'^\d+\.?\d*\s*km$',
-                            then=Replace(
-                                Replace('distancia_m', V(' km'), V('')),
-                                V(','), V('.')
-                            )
-                        ),
-                        default=V('0'),
-                        output_field=models.CharField(),
-                    )
+                    Q(distancia_m__in=['No Distancia', 'Error formato', '']) |
+                    Q(distancia_m__isnull=True)
                 ).annotate(
-                    distance_value=Cast('clean_distance', FloatField())
+                    clean_distance=Cast(
+                        Replace(
+                            Replace(
+                                Replace('distancia_m', Value(' km'), Value('')),
+                                Value(','), Value('.')
+                            ),
+                            Value(' '), Value('')
+                        ),
+                        FloatField()
+                    )
                 )
                 
                 if self.value() == '0-5':
-                    return queryset.filter(distance_value__gte=0, distance_value__lt=5)
+                    return valid_records.filter(clean_distance__gte=0, clean_distance__lt=5)
                 elif self.value() == '5-10':
-                    return queryset.filter(distance_value__gte=5, distance_value__lt=10)
+                    return valid_records.filter(clean_distance__gte=5, clean_distance__lt=10)
                 elif self.value() == '10-15':
-                    return queryset.filter(distance_value__gte=10, distance_value__lt=15)
+                    return valid_records.filter(clean_distance__gte=10, clean_distance__lt=15)
                 elif self.value() == '15+':
-                    return queryset.filter(distance_value__gte=15)
+                    return valid_records.filter(clean_distance__gte=15)
+                
                 return queryset
         
         return [
             'host',
             ('modelo_onu', admin.AllValuesFieldListFilter),
             DistanceRangeFilter,
+        ]
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['host', 'modelo_onu']),
+            models.Index(fields=['distancia_m']),
         ]
