@@ -14,6 +14,7 @@ class EjecucionTareaSNMPInline(admin.TabularInline):
 
 @admin.register(TareaSNMP)
 class TareaSNMPAdmin(admin.ModelAdmin):
+    save_on_top = True
     inlines = [EjecucionTareaSNMPInline]
     fields = ['nombre', 'host_name', 'host_ip', 'comunidad', 'tipo', 'intervalo', 'modo', 'activa']
     list_display = [
