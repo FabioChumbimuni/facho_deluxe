@@ -20,7 +20,7 @@ class TareaSNMP(models.Model):
         ('modo', 'Modo Especial'),
     ]
 
-    # Unificamos aquí todos los “tipos” y “subtipos” SNMP
+    # Unificamos aquí todos los "tipos" y "subtipos" SNMP
     TIPO_CHOICES = [
         ('descubrimiento',     'Descubrimiento'),
         ('onudesc',            'Descripción ONU'),
@@ -72,6 +72,10 @@ class TareaSNMP(models.Model):
     class Meta:
         verbose_name = "Tarea SNMP"
         unique_together = [['host_ip', 'intervalo', 'modo']]
+
+    def __str__(self):
+        tipo_display = dict(self.TIPO_CHOICES).get(self.tipo, self.tipo)
+        return f"{self.nombre} - {tipo_display} ({self.host_name})"
 
     def save(self, *args, **kwargs):
         # Asignamos el OID automático según el tipo elegido

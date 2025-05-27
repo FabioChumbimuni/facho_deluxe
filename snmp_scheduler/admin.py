@@ -30,7 +30,7 @@ class TareaSNMPAdmin(admin.ModelAdmin):
     ]
     list_filter = ('tipo', 'intervalo', 'modo', 'activa')
     search_fields = ('nombre', 'host_ip')
-    actions = ['ejecutar_ahora']
+    actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas']
     change_form_template = "admin/snmp_scheduler/tareasnmp/change_form.html"
 
     def get_urls(self):
@@ -63,6 +63,16 @@ class TareaSNMPAdmin(admin.ModelAdmin):
                 handler.apply_async(args=[tarea.id])
         self.message_user(request, f"🚀 {queryset.count()} tareas encoladas")
     ejecutar_ahora.short_description = "Ejecutar selección ahora"
+
+    def activar_tareas(self, request, queryset):
+        count = queryset.update(activa=True)
+        self.message_user(request, f"✅ {count} tareas activadas")
+    activar_tareas.short_description = "Activar tareas seleccionadas"
+
+    def desactivar_tareas(self, request, queryset):
+        count = queryset.update(activa=False)
+        self.message_user(request, f"⏸️ {count} tareas desactivadas")
+    desactivar_tareas.short_description = "Desactivar tareas seleccionadas"
 
     def estado_actual(self, obj):
         última = obj.ejecuciones.first()

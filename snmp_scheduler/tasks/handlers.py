@@ -1,5 +1,4 @@
 from .snmp_discovery import ejecutar_descubrimiento
-from .snmp_data import ejecutar_tarea_snmp
 from .poller_master import ejecutar_bulk_wrapper
 
 """
@@ -10,9 +9,8 @@ Tipos bulk (onudesc, estado_onu, etc.) → ejecutar_bulk_wrapper
 TASK_HANDLERS = {
     # Tipos legacy
     'descubrimiento': ejecutar_descubrimiento,
-    'datos': ejecutar_tarea_snmp,
     
-    # Nuevos tipos bulk (¡ESTOS ERAN LOS FALTANTES!)
+    # Nuevos tipos bulk
     'onudesc': ejecutar_bulk_wrapper,
     'estado_onu': ejecutar_bulk_wrapper,
     'last_down': ejecutar_bulk_wrapper,

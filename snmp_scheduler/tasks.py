@@ -3,13 +3,11 @@
 from __future__ import absolute_import
 
 # Reexportar tareas desde los módulos nuevos
-from .tasks.snmp_data import ejecutar_tarea_snmp
 from .tasks.snmp_discovery import ejecutar_descubrimiento
 from .tasks.scheduler import ejecutar_tareas_programadas
 
 # Importaciones necesarias para que Celery pueda registrar estas tareas
 __all__ = [
-    'ejecutar_tarea_snmp',
     'ejecutar_descubrimiento',
     'ejecutar_tareas_programadas'
 ]
