@@ -22,6 +22,8 @@ TIPOS_PERMITIDOS = [
 def ejecutar_bulk_wrapper(self, tarea_id=None):
     """
     Procesa solo tareas con tipos válidos (TIPOS_PERMITIDOS).
+    Para ejecución manual (tarea_id especificado) no requiere que la tarea esté activa.
+    Para ejecución automática (tarea_id=None) solo procesa tareas activas.
     """
     close_old_connections()
     ahora = timezone.localtime()
@@ -29,20 +31,21 @@ def ejecutar_bulk_wrapper(self, tarea_id=None):
     # 1) Selección de tareas
     if tarea_id:
         try:
+            # Para ejecución manual solo validamos que exista y tenga tipo válido
             tarea = TareaSNMP.objects.get(
                 pk=tarea_id,
-                activa=True,
-                tipo__in=TIPOS_PERMITIDOS  # 👈 Filtro crítico
+                tipo__in=TIPOS_PERMITIDOS  # Solo validamos tipo válido
             )
             tareas = [tarea]
         except TareaSNMP.DoesNotExist:
-            logger.warning(f"[master] Tarea {tarea_id} no existe, está inactiva o tiene tipo inválido.")
+            logger.warning(f"[master] Tarea {tarea_id} no existe o tiene tipo inválido.")
             return
     else:
+        # Para ejecución automática sí requerimos que esté activa
         minuto = ahora.minute
         tareas = list(
             TareaSNMP.objects
-                     .filter(activa=True, intervalo=f"{minuto:02d}", tipo__in=TIPOS_PERMITIDOS)  # 👈 Filtro crítico
+                     .filter(activa=True, intervalo=f"{minuto:02d}", tipo__in=TIPOS_PERMITIDOS)
                      .order_by('modo')
         )
 
