@@ -97,6 +97,14 @@
       color: #808080;
       min-width: 80px;
     }
+    .task-meta-next {
+      color: #4caf50;
+      font-weight: 500;
+    }
+    .task-meta-countdown {
+      color: #808080;
+      font-size: 0.9em;
+    }
     .task-actions {
       margin-top: 8px;
       text-align: right;
@@ -173,9 +181,14 @@
                 <span class="task-meta-label">⌛ Duración:</span>
                 {{ tarea.duracion }}
               </div>
+              <div class="task-meta-item">
+                <span class="task-meta-label">🕒 Próxima:</span>
+                <span class="task-meta-next">{{ tarea.proxima_ejecucion }}</span>
+                <span class="task-meta-countdown">(en {{ tarea.minutos_restantes }} min)</span>
+              </div>
             </div>
             <div class="task-actions">
-              <a href="{% url 'admin:snmp_scheduler_tareasnmp_ejecutar' tarea.id %}" class="execute-button">
+              <a href="{% url 'admin:supervisor_ejecutar' tarea.id %}" class="execute-button" data-task-id="{{ tarea.id }}">
                 🚀 Ejecutar
               </a>
             </div>

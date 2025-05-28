@@ -20,6 +20,7 @@ class Supervisor(TareaSNMP):
         proxy = True
         verbose_name = 'Supervisor'
         verbose_name_plural = 'Supervisor'
+        app_label = 'snmp_scheduler'
 
 class EjecucionTareaSNMPInline(admin.TabularInline):
     model = EjecucionTareaSNMP
@@ -48,12 +49,12 @@ class TareaSNMPAdmin(admin.ModelAdmin):
 
     def get_urls(self):
         urls = super().get_urls()
-        custom_urls = [
+        my_urls = [
             path('ejecutar/<int:tarea_id>/',
                 self.admin_site.admin_view(self.ejecutar_tarea),
-                name='snmp_scheduler_tareasnmp_ejecutar'),
+                name='%s_%s_ejecutar' % (self.model._meta.app_label, self.model._meta.model_name)),
         ]
-        return custom_urls + urls
+        return my_urls + urls
 
     def ejecutar_tarea(self, request, tarea_id):
         tarea = TareaSNMP.objects.get(pk=tarea_id)
@@ -106,6 +107,44 @@ class SupervisorAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return True
 
+    def get_urls(self):
+        urls = super().get_urls()
+        my_urls = [
+            path('ejecutar/<int:tarea_id>/',
+                self.admin_site.admin_view(self.ejecutar_tarea),
+                name='supervisor_ejecutar'),
+        ]
+        return my_urls + urls
+
+    def ejecutar_tarea(self, request, tarea_id):
+        try:
+            tarea = TareaSNMP.objects.get(pk=tarea_id)
+            handler = TASK_HANDLERS.get(tarea.tipo)
+            if handler:
+                # Forzar la ejecución inmediata
+                handler.apply_async(args=[tarea_id], countdown=0)
+                self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución")
+            else:
+                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
+        except TareaSNMP.DoesNotExist:
+            self.message_user(request, f"❌ La tarea con ID {tarea_id} no existe", level='error')
+        
+        # Redirigir a la vista del supervisor
+        return HttpResponseRedirect(reverse('admin:snmp_scheduler_supervisor_changelist'))
+
+    def get_task_interval(self, task):
+        """Determina el intervalo basado en el campo intervalo de la tarea"""
+        try:
+            intervalo = task.intervalo.strip('()')
+            # Manejar el caso especial de '00'
+            if intervalo == '00' or intervalo == '0':
+                return 0
+            # Para otros intervalos
+            valor = int(intervalo)
+            return valor if valor in [0, 15, 30, 45] else 15
+        except (ValueError, AttributeError):
+            return 15
+
     def get_task_status(self, task, current_time):
         ultima_ejecucion = task.ultima_ejecucion_fecha
         if not ultima_ejecucion:
@@ -114,28 +153,89 @@ class SupervisorAdmin(admin.ModelAdmin):
         # Convertir a hora local
         ultima_ejecucion = localtime(ultima_ejecucion)
         current_time = localtime(current_time)
+        task_interval = self.get_task_interval(task)
         
-        # Obtener la hora actual redondeada a la última marca de 15 minutos
-        current_hour = current_time.replace(minute=0, second=0, microsecond=0)
-        
-        # Si la última ejecución fue antes de la hora actual, mostrar como pendiente
-        if ultima_ejecucion < current_hour:
-            return 'pending'
-        
-        # Si la última ejecución fue en este período de 15 minutos
-        if ultima_ejecucion >= current_hour:
-            return 'success' if task.ultimo_estado == 'C' else 'error'
+        # Manejar el caso especial del intervalo 00
+        if task_interval == 0:
+            current_hour_start = current_time.replace(minute=0, second=0, microsecond=0)
+            if ultima_ejecucion < current_hour_start:
+                return 'pending'
+        else:
+            # Para otros intervalos, encontrar el último intervalo válido
+            intervals = [0, 15, 30, 45]
+            current_minutes = current_time.minute
+            last_interval = 0
             
-        return 'pending'
+            # Encontrar el último intervalo que debería haberse ejecutado
+            for interval in intervals:
+                if interval <= current_minutes:
+                    last_interval = interval
+                else:
+                    break
+            
+            last_execution_time = current_time.replace(
+                minute=last_interval,
+                second=0,
+                microsecond=0
+            )
+            
+            if ultima_ejecucion < last_execution_time:
+                return 'pending'
+        
+        return 'success' if task.ultimo_estado == 'C' else 'error'
 
-    def get_task_interval(self, task):
-        """Determina el intervalo basado en el campo intervalo de la tarea"""
-        # Limpiar el intervalo de paréntesis
-        intervalo_limpio = task.intervalo.strip('()')
-        return intervalo_limpio
+    def get_next_execution(self, task, current_time):
+        """Calcula el próximo tiempo de ejecución programado para una tarea"""
+        current_time = localtime(current_time)
+        task_interval = self.get_task_interval(task)
+        
+        # Manejar el caso especial del intervalo 00
+        if task_interval == 0:
+            if current_time.minute == 0:
+                next_execution = current_time.replace(
+                    hour=current_time.hour + 1,
+                    minute=0,
+                    second=0,
+                    microsecond=0
+                )
+            else:
+                next_execution = current_time.replace(
+                    hour=current_time.hour + 1,
+                    minute=0,
+                    second=0,
+                    microsecond=0
+                )
+            return next_execution
+        
+        # Para otros intervalos (15, 30, 45)
+        current_minutes = current_time.minute
+        # Encontrar el próximo intervalo válido
+        intervals = [0, 15, 30, 45]
+        next_interval = None
+        
+        # Buscar el próximo intervalo válido
+        for interval in intervals:
+            if interval > current_minutes:
+                next_interval = interval
+                break
+        
+        # Si no encontramos un intervalo mayor, significa que el próximo es en la siguiente hora
+        if next_interval is None:
+            return current_time.replace(
+                hour=current_time.hour + 1,
+                minute=0,
+                second=0,
+                microsecond=0
+            )
+            
+        return current_time.replace(
+            minute=next_interval,
+            second=0,
+            microsecond=0
+        )
 
     def changelist_view(self, request, extra_context=None):
-        current_time = localtime(timezone.now())
+        current_time = timezone.now()
         
         # Obtener todas las tareas activas
         tareas = TareaSNMP.objects.filter(activa=True).annotate(
@@ -159,43 +259,52 @@ class SupervisorAdmin(admin.ModelAdmin):
                     )
                 )[:1]
             )
-        ).order_by('intervalo', 'nombre')  # Ordenar por intervalo y nombre
+        ).order_by('intervalo', 'nombre')
 
-        # Organizar tareas por intervalos de 15 minutos
+        # Organizar tareas por intervalos
         intervalos = {
-            '00': {'titulo': 'Minuto 00', 'tareas': []},
+            '00': {'titulo': 'Cada Hora (00)', 'tareas': []},
             '15': {'titulo': 'Minuto 15', 'tareas': []},
             '30': {'titulo': 'Minuto 30', 'tareas': []},
             '45': {'titulo': 'Minuto 45', 'tareas': []}
         }
 
-        # Distribuir todas las tareas en los intervalos
         for tarea in tareas:
-            # Determinar el intervalo para esta tarea
-            intervalo = self.get_task_interval(tarea)
-            
-            # Verificar que el intervalo sea válido
-            if intervalo not in intervalos:
-                continue
+            try:
+                intervalo = self.get_task_interval(task=tarea)
+                intervalo_str = str(intervalo).zfill(2)
                 
-            estado = self.get_task_status(tarea, current_time)
-            ultima_ejecucion = tarea.ultima_ejecucion_fecha
-            
-            # Verificar que la última ejecución no sea en el futuro
-            if ultima_ejecucion and ultima_ejecucion > current_time:
-                ultima_ejecucion = None
-            
-            tarea_info = {
-                'id': tarea.id,
-                'nombre': tarea.nombre,
-                'host_ip': tarea.host_ip,
-                'tipo': tarea.get_tipo_display(),
-                'modo': tarea.get_modo_display(),
-                'estado': estado,
-                'ultima_ejecucion': localtime(ultima_ejecucion).strftime('%d/%m/%Y %H:%M') if ultima_ejecucion else 'No ejecutada',
-                'duracion': str(tarea.duracion).split('.')[0] if tarea.duracion else '--',
-            }
-            intervalos[intervalo]['tareas'].append(tarea_info)
+                if intervalo_str not in intervalos:
+                    continue
+
+                estado = self.get_task_status(tarea, current_time)
+                ultima_ejecucion = tarea.ultima_ejecucion_fecha
+                proxima_ejecucion = self.get_next_execution(tarea, current_time)
+
+                if ultima_ejecucion and ultima_ejecucion > current_time:
+                    ultima_ejecucion = None
+
+                # Calcular tiempo restante
+                tiempo_restante = proxima_ejecucion - localtime(current_time)
+                minutos_restantes = max(0, int(tiempo_restante.total_seconds() / 60))
+
+                tarea_info = {
+                    'id': tarea.id,
+                    'nombre': tarea.nombre,
+                    'host_ip': tarea.host_ip,
+                    'tipo': tarea.get_tipo_display(),
+                    'modo': tarea.get_modo_display(),
+                    'estado': estado,
+                    'ultima_ejecucion': localtime(ultima_ejecucion).strftime('%d/%m/%Y %H:%M') if ultima_ejecucion else 'No ejecutada',
+                    'duracion': str(tarea.duracion).split('.')[0] if tarea.duracion else '--',
+                    'proxima_ejecucion': localtime(proxima_ejecucion).strftime('%H:%M'),
+                    'minutos_restantes': minutos_restantes,
+                    'intervalo': intervalo
+                }
+                intervalos[intervalo_str]['tareas'].append(tarea_info)
+            except Exception as e:
+                # Si hay algún error con una tarea específica, la saltamos
+                continue
 
         context = {
             **self.admin_site.each_context(request),

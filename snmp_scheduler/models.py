@@ -71,7 +71,18 @@ class TareaSNMP(models.Model):
 
     class Meta:
         verbose_name = "Tarea SNMP"
-        unique_together = [['host_ip', 'intervalo', 'modo']]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['host_ip', 'intervalo', 'modo'],
+                condition=models.Q(modo__in=['principal', 'modo']),
+                name='unique_principal_modo'
+            ),
+            models.UniqueConstraint(
+                fields=['host_ip', 'intervalo', 'modo', 'tipo'],
+                condition=models.Q(modo='secundario'),
+                name='unique_secundario_por_tipo'
+            ),
+        ]
 
     def __str__(self):
         tipo_display = dict(self.TIPO_CHOICES).get(self.tipo, self.tipo)

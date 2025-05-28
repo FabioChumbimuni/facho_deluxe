@@ -160,10 +160,25 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_RESULT_BACKEND = 'django-db'
 CELERY_TIMEZONE = 'America/Lima'  # Ajustar según zona horaria
 CELERY_BEAT_SCHEDULE = {
-    'snmp-discovery': {
-        'task': 'snmp_scheduler.tasks.ejecutar_descubrimiento',
-        'schedule': crontab(minute='*/15'),
-        'options': {'queue': 'snmp'}
+    # Tarea SNMP unificada (cada 15 minutos)
+    'tareas-snmp-programadas': {
+        'task': 'snmp_scheduler.tasks.ejecutar_tareas_programadas',
+        'schedule': crontab(minute='*/15'),  # :00, :15, :30, :45
+        'options': {'queue': 'principal'}
+    },
+
+    # Tarea existente para scripts (cada hora en punto)
+    'ejecutar-ciclo-scripts-cada-hora': {
+        'task': 'scripts.tasks.ejecutar_ciclo_scripts',
+        'schedule': crontab(minute=0, hour='*'),  # Ej: 12:00, 13:00, etc.
+        'options': {'queue': 'principal'}
+    },
+
+    # Tarea existente para bloques programados
+    'ejecutar-bloques-programados-cada-minuto': {
+        'task': 'scripts.tasks.ejecutar_bloques_programados',
+        'schedule': crontab(minute='*/5'),  # Cada 5 minutos
+        'options': {'queue': 'principal'}
     }
 }
 
@@ -184,29 +199,6 @@ CELERY_TASK_ANNOTATIONS = {
     }
 }
 
-CELERY_BEAT_SCHEDULE = {
-    # Tarea existente para scripts (cada hora en punto)
-    'ejecutar-ciclo-scripts-cada-hora': {
-        'task': 'scripts.tasks.ejecutar_ciclo_scripts',
-        'schedule': crontab(minute=0, hour='*'),  # Ej: 12:00, 13:00, etc.
-        'options': {'queue': 'principal'}
-    },
-
-    # Tarea existente para bloques programados (cada minuto)
-    'ejecutar-bloques-programados-cada-minuto': {
-        'task': 'scripts.tasks.ejecutar_bloques_programados',
-        'schedule': crontab(minute='*/5'),  # Cada minuto (0,1,2...59)
-        'options': {'queue': 'principal'}
-    },
-
-    # Tarea SNMP unificada (cada 15 minutos)
-    'tareas-snmp-programadas': {
-        'task': 'snmp_scheduler.tasks.ejecutar_tareas_programadas',
-        'schedule': crontab(minute='*/15'),  # :00, :15, :30, :45
-        'options': {'queue': 'principal'}
-    }
-}
-  
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
