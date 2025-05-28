@@ -1,0 +1,192 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}">
+  <style>
+    .dashboard-container {
+      padding: 15px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .current-time {
+      text-align: right;
+      color: #a0a0a0;
+      margin-bottom: 15px;
+      font-size: 0.9em;
+    }
+    .intervals-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 1200px) {
+      .intervals-container {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 768px) {
+      .intervals-container {
+        grid-template-columns: 1fr;
+      }
+    }
+    .interval-section {
+      background: #1f2029;
+      border-radius: 6px;
+      padding: 15px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .interval-title {
+      font-size: 1.1em;
+      font-weight: 500;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #383f4d;
+      color: #f2f2f2;
+      text-align: center;
+    }
+    .tasks-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .task-card {
+      background: #2f3544;
+      border: 1px solid #383f4d;
+      border-radius: 6px;
+      padding: 10px;
+      position: relative;
+      transition: all 0.2s ease;
+      font-size: 0.9em;
+    }
+    .task-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      background: #363d4f;
+    }
+    .task-status-dot {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+    .task-name {
+      font-size: 1em;
+      font-weight: 500;
+      margin-bottom: 8px;
+      padding-right: 15px;
+      color: #fff;
+    }
+    .task-meta {
+      display: grid;
+      gap: 4px;
+      color: #a0a0a0;
+      font-size: 0.85em;
+    }
+    .task-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .task-meta-label {
+      color: #808080;
+      min-width: 80px;
+    }
+    .task-actions {
+      margin-top: 8px;
+      text-align: right;
+    }
+    .execute-button {
+      background: #0275b8;
+      color: white;
+      border: none;
+      padding: 4px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.85em;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+    }
+    .execute-button:hover {
+      background: #0266a2;
+      transform: translateY(-1px);
+    }
+    .no-tasks {
+      color: #a0a0a0;
+      font-style: italic;
+      text-align: center;
+      padding: 15px;
+      background: #2f3544;
+      border-radius: 6px;
+      border: 1px dashed #383f4d;
+      font-size: 0.9em;
+    }
+    .status-success { background-color: #4caf50; box-shadow: 0 0 4px rgba(76, 175, 80, 0.5); }
+    .status-error { background-color: #f44336; box-shadow: 0 0 4px rgba(244, 67, 54, 0.5); }
+    .status-pending { background-color: #ff9800; box-shadow: 0 0 4px rgba(255, 152, 0, 0.5); }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+  <h1>{{ title }}</h1>
+  <div class="current-time">
+    🕒 Hora actual: {{ current_time }}
+  </div>
+  
+  <div class="intervals-container">
+    {% for intervalo, datos in intervalos.items %}
+    <div class="interval-section">
+      <h2 class="interval-title">{{ datos.titulo }}</h2>
+      {% if datos.tareas %}
+        <div class="tasks-grid">
+          {% for tarea in datos.tareas %}
+          <div class="task-card">
+            <div class="task-status-dot status-{{ tarea.estado }}"></div>
+            <div class="task-name">{{ tarea.nombre }}</div>
+            <div class="task-meta">
+              <div class="task-meta-item">
+                <span class="task-meta-label">📍 IP:</span>
+                {{ tarea.host_ip }}
+              </div>
+              <div class="task-meta-item">
+                <span class="task-meta-label">📊 Tipo:</span>
+                {{ tarea.tipo }}
+              </div>
+              <div class="task-meta-item">
+                <span class="task-meta-label">🔄 Modo:</span>
+                {{ tarea.modo }}
+              </div>
+              <div class="task-meta-item">
+                <span class="task-meta-label">⏰ Última ejec:</span>
+                {{ tarea.ultima_ejecucion }}
+              </div>
+              <div class="task-meta-item">
+                <span class="task-meta-label">⌛ Duración:</span>
+                {{ tarea.duracion }}
+              </div>
+            </div>
+            <div class="task-actions">
+              <a href="{% url 'admin:snmp_scheduler_tareasnmp_ejecutar' tarea.id %}" class="execute-button">
+                🚀 Ejecutar
+              </a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="no-tasks">No hay tareas en este intervalo</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %} 

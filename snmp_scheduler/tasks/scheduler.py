@@ -18,6 +18,17 @@ TIPOS_BULK = [
     'distancia_m', 'modelo_onu'
 ]
 
+def get_current_interval(time):
+    """Calcula el intervalo actual (00, 15, 30, 45)"""
+    minute = time.minute
+    if minute >= 45:
+        return '45'
+    elif minute >= 30:
+        return '30'
+    elif minute >= 15:
+        return '15'
+    return '00'
+
 @shared_task(name="snmp_scheduler.tasks._execute_bulk_and_next")
 def _execute_bulk_and_next(header_results, bulk_ids, modo_actual, modos_restantes):
     """
@@ -49,20 +60,20 @@ def _start_fase(header_results, modo_actual, modos_restantes):
     - modos_restantes: fases posteriores
     """
     ahora = timezone.localtime()
-    intervalo = (ahora.minute // 15) * 15
+    intervalo = get_current_interval(ahora)
 
     # Filtrar tareas candidatas para esta fase
     qs = TareaSNMP.objects.filter(
         activa=True,
         modo=modo_actual,
-        intervalo=intervalo
+        intervalo=f"({intervalo})"
     ).filter(
         Q(ultima_ejecucion__lte=ahora - timedelta(minutes=14)) |
         Q(ultima_ejecucion__isnull=True)
     )
 
     desc_ids = [t.pk for t in qs if t.tipo == "descubrimiento"]
-    bulk_ids = [t.pk for t in qs if t.tipo in TIPOS_BULK]  # ← Cambio clave
+    bulk_ids = [t.pk for t in qs if t.tipo in TIPOS_BULK]
 
     logger.info(f"[scheduler] Fase '{modo_actual}': {len(desc_ids)} discovery, {len(bulk_ids)} bulk")
 
@@ -87,14 +98,14 @@ def ejecutar_tareas_programadas():
     y de ahí encadena 'modo' y 'secundario'.
     """
     ahora = timezone.localtime()
-    intervalo = (ahora.minute // 15) * 15
-    logger.info(f"[scheduler] Intervalo actual: {intervalo:02d}")
+    intervalo = get_current_interval(ahora)
+    logger.info(f"[scheduler] Intervalo actual: {intervalo}")
 
     # Obtenemos candidatas únicamente en modo PRINCIPAL
     qs = TareaSNMP.objects.filter(
         activa=True,
         modo="principal",
-        intervalo=intervalo
+        intervalo=f"({intervalo})"
     ).filter(
         Q(ultima_ejecucion__lte=ahora - timedelta(minutes=14)) |
         Q(ultima_ejecucion__isnull=True)

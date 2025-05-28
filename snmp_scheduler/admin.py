@@ -7,9 +7,19 @@ from django.db.models import Q, Case, When, Value, FloatField, F
 from django.db.models.functions import Replace, Cast
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.aggregates import ArrayAgg
+from django.template.response import TemplateResponse
+from django.utils import timezone
+from django.utils.timezone import localtime
 from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
+
+# Modelo proxy para el Supervisor
+class Supervisor(TareaSNMP):
+    class Meta:
+        proxy = True
+        verbose_name = 'Supervisor'
+        verbose_name_plural = 'Supervisor'
 
 class EjecucionTareaSNMPInline(admin.TabularInline):
     model = EjecucionTareaSNMP
@@ -30,36 +40,30 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         'modo',
         'activa',
         'ultima_ejecucion',
-        'ejecuciones_recientes',
         'estado_actual',
     ]
     list_filter = ('tipo', 'intervalo', 'modo', 'activa')
     search_fields = ('nombre', 'host_ip')
     actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas']
-    change_form_template = "admin/snmp_scheduler/tareasnmp/change_form.html"
 
     def get_urls(self):
         urls = super().get_urls()
-        custom = [
-            path(
-                '<path:object_id>/ejecutar/',
+        custom_urls = [
+            path('ejecutar/<int:tarea_id>/',
                 self.admin_site.admin_view(self.ejecutar_tarea),
-                name='snmp_scheduler_tareasnmp_ejecutar'
-            ),
+                name='snmp_scheduler_tareasnmp_ejecutar'),
         ]
-        return custom + urls
+        return custom_urls + urls
 
-    def ejecutar_tarea(self, request, object_id):
-        tarea = TareaSNMP.objects.get(pk=object_id)
+    def ejecutar_tarea(self, request, tarea_id):
+        tarea = TareaSNMP.objects.get(pk=tarea_id)
         handler = TASK_HANDLERS.get(tarea.tipo)
-        if not handler:
-            self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
+        if handler:
+            handler.apply_async(args=[tarea_id])
+            self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución")
         else:
-            handler.apply_async(args=[object_id])
-            self.message_user(request, "✅ Tarea enviada a la cola de ejecución")
-        return HttpResponseRedirect(
-            reverse('admin:snmp_scheduler_tareasnmp_change', args=[object_id])
-        )
+            self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
+        return HttpResponseRedirect('../')
 
     def ejecutar_ahora(self, request, queryset):
         for tarea in queryset:
@@ -84,14 +88,129 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         return última.estado if última else '--'
     estado_actual.short_description = 'Último Estado'
 
-    def ejecuciones_recientes(self, obj):
-        return obj.ejecuciones.order_by('-inicio')[:5].count()
-    ejecuciones_recientes.short_description = 'Ejec. Recientes (24h)'
+    def ultima_ejecucion(self, obj):
+        última = obj.ejecuciones.first()
+        return última.inicio if última else '--'
+    ultima_ejecucion.short_description = 'Última Ejecución'
+
+@admin.register(Supervisor)
+class SupervisorAdmin(admin.ModelAdmin):
+    change_list_template = 'admin/snmp_scheduler/supervisor.html'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return True
+
+    def get_task_status(self, task, current_time):
+        ultima_ejecucion = task.ultima_ejecucion_fecha
+        if not ultima_ejecucion:
+            return 'pending'
+        
+        # Convertir a hora local
+        ultima_ejecucion = localtime(ultima_ejecucion)
+        current_time = localtime(current_time)
+        
+        # Obtener la hora actual redondeada a la última marca de 15 minutos
+        current_hour = current_time.replace(minute=0, second=0, microsecond=0)
+        
+        # Si la última ejecución fue antes de la hora actual, mostrar como pendiente
+        if ultima_ejecucion < current_hour:
+            return 'pending'
+        
+        # Si la última ejecución fue en este período de 15 minutos
+        if ultima_ejecucion >= current_hour:
+            return 'success' if task.ultimo_estado == 'C' else 'error'
+            
+        return 'pending'
+
+    def get_task_interval(self, task):
+        """Determina el intervalo basado en el campo intervalo de la tarea"""
+        # Limpiar el intervalo de paréntesis
+        intervalo_limpio = task.intervalo.strip('()')
+        return intervalo_limpio
+
+    def changelist_view(self, request, extra_context=None):
+        current_time = localtime(timezone.now())
+        
+        # Obtener todas las tareas activas
+        tareas = TareaSNMP.objects.filter(activa=True).annotate(
+            ultima_ejecucion_fecha=models.Subquery(
+                EjecucionTareaSNMP.objects.filter(
+                    tarea=models.OuterRef('pk')
+                ).order_by('-inicio').values('inicio')[:1]
+            ),
+            ultimo_estado=models.Subquery(
+                EjecucionTareaSNMP.objects.filter(
+                    tarea=models.OuterRef('pk')
+                ).order_by('-inicio').values('estado')[:1]
+            ),
+            duracion=models.Subquery(
+                EjecucionTareaSNMP.objects.filter(
+                    tarea=models.OuterRef('pk')
+                ).order_by('-inicio').values(
+                    duracion=models.ExpressionWrapper(
+                        models.F('fin') - models.F('inicio'),
+                        output_field=models.DurationField()
+                    )
+                )[:1]
+            )
+        ).order_by('intervalo', 'nombre')  # Ordenar por intervalo y nombre
+
+        # Organizar tareas por intervalos de 15 minutos
+        intervalos = {
+            '00': {'titulo': 'Minuto 00', 'tareas': []},
+            '15': {'titulo': 'Minuto 15', 'tareas': []},
+            '30': {'titulo': 'Minuto 30', 'tareas': []},
+            '45': {'titulo': 'Minuto 45', 'tareas': []}
+        }
+
+        # Distribuir todas las tareas en los intervalos
+        for tarea in tareas:
+            # Determinar el intervalo para esta tarea
+            intervalo = self.get_task_interval(tarea)
+            
+            # Verificar que el intervalo sea válido
+            if intervalo not in intervalos:
+                continue
+                
+            estado = self.get_task_status(tarea, current_time)
+            ultima_ejecucion = tarea.ultima_ejecucion_fecha
+            
+            # Verificar que la última ejecución no sea en el futuro
+            if ultima_ejecucion and ultima_ejecucion > current_time:
+                ultima_ejecucion = None
+            
+            tarea_info = {
+                'id': tarea.id,
+                'nombre': tarea.nombre,
+                'host_ip': tarea.host_ip,
+                'tipo': tarea.get_tipo_display(),
+                'modo': tarea.get_modo_display(),
+                'estado': estado,
+                'ultima_ejecucion': localtime(ultima_ejecucion).strftime('%d/%m/%Y %H:%M') if ultima_ejecucion else 'No ejecutada',
+                'duracion': str(tarea.duracion).split('.')[0] if tarea.duracion else '--',
+            }
+            intervalos[intervalo]['tareas'].append(tarea_info)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Supervisor de Tareas',
+            'intervalos': intervalos,
+            'has_add_permission': self.has_add_permission(request),
+            'current_time': localtime(current_time).strftime('%d/%m/%Y %H:%M'),
+        }
+
+        return TemplateResponse(request, self.change_list_template, context)
 
 @admin.register(EjecucionTareaSNMP)
 class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
     list_display = (
-        'nombre_tarea',  # 👈 Nueva columna
+        'nombre_tarea',
         'host_ip', 
         'tipo_tarea', 
         'inicio', 
@@ -99,26 +218,24 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
         'estado', 
         'duracion'
     )
-    list_filter = ('estado', 'tarea__host_name', 'tarea__tipo')  # Filtro por tipo
-    search_fields = ('tarea__nombre', 'error', 'tarea__host_ip')  # Búsqueda por IP
+    list_filter = ('estado', 'tarea__host_name', 'tarea__tipo')
+    search_fields = ('tarea__nombre', 'error', 'tarea__host_ip')
     
-    # Nuevos campos personalizados
     def nombre_tarea(self, obj):
-        return obj.tarea.nombre  # Nombre de la tarea
+        return obj.tarea.nombre
     nombre_tarea.short_description = "Tarea"
 
     def host_ip(self, obj):
-        return obj.tarea.host_ip  # IP del OLT
+        return obj.tarea.host_ip
     host_ip.short_description = "IP OLT"
 
     def tipo_tarea(self, obj):
-        return obj.tarea.get_tipo_display()  # Tipo legible (ej. "Descripción ONU")
+        return obj.tarea.get_tipo_display()
     tipo_tarea.short_description = "Tipo"
 
     readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
     actions = ['borrar_seleccion_async']
-    def __str__(self):
-        return f"{self.tarea.nombre} ({self.inicio:%Y-%m-%d %H:%M:%S})"  # Nombre + fecha
+
     def duracion(self, obj):
         return obj.fin - obj.inicio if obj.fin else 'En curso'
     duracion.short_description = 'Duración'

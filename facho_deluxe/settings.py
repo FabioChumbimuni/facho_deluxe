@@ -158,7 +158,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_RESULT_BACKEND = 'django-db'
-CELERY_TIMEZONE = 'America/Bogota'  # Ajustar según zona horaria
+CELERY_TIMEZONE = 'America/Lima'  # Ajustar según zona horaria
 CELERY_BEAT_SCHEDULE = {
     'snmp-discovery': {
         'task': 'snmp_scheduler.tasks.ejecutar_descubrimiento',
