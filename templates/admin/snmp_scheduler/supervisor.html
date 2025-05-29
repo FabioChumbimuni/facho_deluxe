@@ -97,6 +97,10 @@
       color: #808080;
       min-width: 80px;
     }
+    .task-meta-last {
+      color: #00bcd4;  /* Color celeste */
+      font-weight: 500;
+    }
     .task-meta-next {
       color: #4caf50;
       font-weight: 500;
@@ -145,7 +149,6 @@
 
 {% block content %}
 <div class="dashboard-container">
-  <h1>{{ title }}</h1>
   <div class="current-time">
     🕒 Hora actual: {{ current_time }}
   </div>
@@ -175,7 +178,7 @@
               </div>
               <div class="task-meta-item">
                 <span class="task-meta-label">⏰ Última ejec:</span>
-                {{ tarea.ultima_ejecucion }}
+                <span class="task-meta-last">{{ tarea.ultima_ejecucion }}</span>
               </div>
               <div class="task-meta-item">
                 <span class="task-meta-label">⌛ Duración:</span>

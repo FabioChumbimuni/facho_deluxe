@@ -189,8 +189,9 @@ class SupervisorAdmin(admin.ModelAdmin):
         current_time = localtime(current_time)
         task_interval = self.get_task_interval(task)
         
-        # Manejar el caso especial del intervalo 00
+        # Manejar el caso especial del intervalo 00 (cada hora)
         if task_interval == 0:
+            # Si estamos en el minuto 0, la próxima ejecución es en la siguiente hora
             if current_time.minute == 0:
                 next_execution = current_time.replace(
                     hour=current_time.hour + 1,
@@ -199,6 +200,7 @@ class SupervisorAdmin(admin.ModelAdmin):
                     microsecond=0
                 )
             else:
+                # Si no estamos en el minuto 0, la próxima ejecución es en la siguiente hora
                 next_execution = current_time.replace(
                     hour=current_time.hour + 1,
                     minute=0,
@@ -209,7 +211,6 @@ class SupervisorAdmin(admin.ModelAdmin):
         
         # Para otros intervalos (15, 30, 45)
         current_minutes = current_time.minute
-        # Encontrar el próximo intervalo válido
         intervals = [0, 15, 30, 45]
         next_interval = None
         
@@ -227,7 +228,8 @@ class SupervisorAdmin(admin.ModelAdmin):
                 second=0,
                 microsecond=0
             )
-            
+        
+        # Si encontramos un intervalo válido, la próxima ejecución es en este mismo intervalo
         return current_time.replace(
             minute=next_interval,
             second=0,
@@ -308,7 +310,7 @@ class SupervisorAdmin(admin.ModelAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            'title': 'Supervisor de Tareas',
+            'title': 'Panel de Supervisión',
             'intervalos': intervalos,
             'has_add_permission': self.has_add_permission(request),
             'current_time': localtime(current_time).strftime('%d/%m/%Y %H:%M'),

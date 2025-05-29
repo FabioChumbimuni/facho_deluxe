@@ -26,13 +26,13 @@ app.conf.task_queues = {
 # Planificación de tareas periódicas (Beat)
 app.conf.beat_schedule = {
     # Módulo SNMP: cada 15 minutos
-    'snmp-every-15-min': {
+    'tareas-snmp-programadas': {
         'task': 'snmp_scheduler.tasks.ejecutar_tareas_programadas',
-        'schedule': crontab(minute='*/15'),
+        'schedule': crontab(minute='*/15'),  # Ejecutar cada 15 minutos
         'options': {'queue': 'principal'},
     },
     # Módulo Scripts: cada 15 minutos
-    'scripts-every-15-min': {
+    'ejecutar-bloques-programados': {
         'task': 'scripts.tasks.ejecutar_bloques_programados',
         'schedule': crontab(minute='*/15'),
         'options': {'queue': 'secundario'},
