@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Tareas Combinadas</h2>
+        <a href="{% url 'snmp_scheduler:tarea_combinada_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Nueva Tarea Combinada
+        </a>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Hosts</th>
+                            <th>Configuraciones</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tarea in tareas %}
+                            <tr>
+                                <td>{{ tarea.nombre }}</td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ tarea.hosts.all|join:", " }}
+                                    </small>
+                                </td>
+                                <td>
+                                    {% for config in tarea.configuraciones.all %}
+                                        <div class="mb-1">
+                                            <span class="badge bg-info">{{ config.get_intervalo_display }}</span>
+                                            <span class="badge bg-secondary">{{ config.get_modo_display }}</span>
+                                            <small class="text-muted">
+                                                ({{ config.tipos_tareas|join:", " }})
+                                            </small>
+                                        </div>
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    {% if tarea.activa %}
+                                        <span class="badge bg-success">Activa</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Inactiva</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{% url 'snmp_scheduler:tarea_combinada_edit' tarea.pk %}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{% url 'snmp_scheduler:tarea_combinada_delete' tarea.pk %}" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center">No hay tareas combinadas registradas</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

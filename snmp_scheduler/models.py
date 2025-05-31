@@ -137,7 +137,7 @@ class OnuDato(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.snmpindexonu} @ {self.host_name}"
+        return f"{self.snmpindexonu}"
 
 
 class EjecucionTareaSNMP(models.Model):

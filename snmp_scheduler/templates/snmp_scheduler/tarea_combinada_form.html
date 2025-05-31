@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">{{ title }}</h3>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {# Sección principal #}
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.nombre.id_for_label }}" class="form-label">
+                                        {{ form.nombre.label }}
+                                    </label>
+                                    {{ form.nombre }}
+                                    {% if form.nombre.errors %}
+                                        {% for error in form.nombre.errors %}
+                                            <div class="invalid-feedback d-block">{{ error }}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="{{ form.hosts.id_for_label }}" class="form-label">
+                                        {{ form.hosts.label }}
+                                    </label>
+                                    {{ form.hosts }}
+                                    {% if form.hosts.errors %}
+                                        {% for error in form.hosts.errors %}
+                                            <div class="invalid-feedback d-block">{{ error }}</div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        {# Sección de configuraciones #}
+                        <h4 class="mb-3">Configuración por Intervalos</h4>
+                        
+                        {{ formset.management_form }}
+                        
+                        <div class="row">
+                            {% for form in formset %}
+                                <div class="col-md-3">
+                                    <div class="card mb-3">
+                                        <div class="card-header">
+                                            <h5 class="card-title mb-0">
+                                                Intervalo {{ forloop.counter0|multiply:"15" }}
+                                            </h5>
+                                        </div>
+                                        <div class="card-body">
+                                            {# Campo Modo #}
+                                            <div class="mb-3">
+                                                <label class="form-label">Modo</label>
+                                                {{ form.modo }}
+                                                {% if form.modo.errors %}
+                                                    {% for error in form.modo.errors %}
+                                                        <div class="invalid-feedback d-block">{{ error }}</div>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </div>
+
+                                            {# Campo Tipos de Tareas #}
+                                            <div class="mb-3">
+                                                <label class="form-label">Tipos de Tareas</label>
+                                                <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                                    {{ form.tipos_tareas }}
+                                                </div>
+                                                {% if form.tipos_tareas.errors %}
+                                                    {% for error in form.tipos_tareas.errors %}
+                                                        <div class="invalid-feedback d-block">{{ error }}</div>
+                                                    {% endfor %}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{% url 'snmp_scheduler:tarea_combinada_list' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Volver
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Guardar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Función para multiplicar en templates
+    function multiply(value, arg) {
+        return value * arg;
+    }
+</script>
+{% endblock %} 

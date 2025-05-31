@@ -57,14 +57,17 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         return my_urls + urls
 
     def ejecutar_tarea(self, request, tarea_id):
-        tarea = TareaSNMP.objects.get(pk=tarea_id)
-        handler = TASK_HANDLERS.get(tarea.tipo)
-        if handler:
-            handler.apply_async(args=[tarea_id])
-            self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución")
-        else:
-            self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
-        return HttpResponseRedirect('../')
+        try:
+            tarea = TareaSNMP.objects.get(pk=tarea_id)
+            handler = TASK_HANDLERS.get(tarea.tipo)
+            if handler:
+                handler.apply_async(args=[tarea_id])
+                self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución")
+            else:
+                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
+        except TareaSNMP.DoesNotExist:
+            self.message_user(request, f"❌ La tarea con ID {tarea_id} no existe", level='error')
+        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '../'))
 
     def ejecutar_ahora(self, request, queryset):
         for tarea in queryset:
