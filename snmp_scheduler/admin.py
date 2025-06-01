@@ -13,6 +13,7 @@ from django.utils.timezone import localtime
 from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
+from datetime import timedelta
 
 # Modelo proxy para el Supervisor
 class Supervisor(TareaSNMP):
@@ -45,7 +46,7 @@ class TareaSNMPAdmin(admin.ModelAdmin):
     ]
     list_filter = ('tipo', 'intervalo', 'modo', 'activa')
     search_fields = ('nombre', 'host_ip')
-    actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas']
+    actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas', 'cambiar_intervalo_00', 'cambiar_intervalo_15', 'cambiar_intervalo_30', 'cambiar_intervalo_45']
 
     def get_urls(self):
         urls = super().get_urls()
@@ -86,6 +87,26 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         count = queryset.update(activa=False)
         self.message_user(request, f"⏸️ {count} tareas desactivadas")
     desactivar_tareas.short_description = "Desactivar tareas seleccionadas"
+
+    def cambiar_intervalo_00(self, request, queryset):
+        count = queryset.update(intervalo='00')
+        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 00")
+    cambiar_intervalo_00.short_description = "Cambiar a intervalo 00"
+
+    def cambiar_intervalo_15(self, request, queryset):
+        count = queryset.update(intervalo='15')
+        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 15")
+    cambiar_intervalo_15.short_description = "Cambiar a intervalo 15"
+
+    def cambiar_intervalo_30(self, request, queryset):
+        count = queryset.update(intervalo='30')
+        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 30")
+    cambiar_intervalo_30.short_description = "Cambiar a intervalo 30"
+
+    def cambiar_intervalo_45(self, request, queryset):
+        count = queryset.update(intervalo='45')
+        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 45")
+    cambiar_intervalo_45.short_description = "Cambiar a intervalo 45"
 
     def estado_actual(self, obj):
         última = obj.ejecuciones.first()
@@ -156,6 +177,7 @@ class SupervisorAdmin(admin.ModelAdmin):
         # Convertir a hora local
         ultima_ejecucion = localtime(ultima_ejecucion)
         current_time = localtime(current_time)
+        current_minute = current_time.minute
         task_interval = self.get_task_interval(task)
         
         # Manejar el caso especial del intervalo 00
@@ -164,26 +186,15 @@ class SupervisorAdmin(admin.ModelAdmin):
             if ultima_ejecucion < current_hour_start:
                 return 'pending'
         else:
-            # Para otros intervalos, encontrar el último intervalo válido
-            intervals = [0, 15, 30, 45]
-            current_minutes = current_time.minute
-            last_interval = 0
-            
-            # Encontrar el último intervalo que debería haberse ejecutado
-            for interval in intervals:
-                if interval <= current_minutes:
-                    last_interval = interval
-                else:
-                    break
-            
-            last_execution_time = current_time.replace(
-                minute=last_interval,
-                second=0,
-                microsecond=0
-            )
-            
-            if ultima_ejecucion < last_execution_time:
-                return 'pending'
+            # Para otros intervalos
+            if current_minute < task_interval:
+                # Si estamos antes del intervalo, debería ejecutarse
+                if ultima_ejecucion < current_time.replace(minute=0, second=0, microsecond=0):
+                    return 'pending'
+            else:
+                # Si ya pasamos el intervalo, la próxima es en la siguiente hora
+                if ultima_ejecucion < current_time.replace(minute=task_interval, second=0, microsecond=0):
+                    return 'pending'
         
         return 'success' if task.ultimo_estado == 'C' else 'error'
 
@@ -195,49 +206,36 @@ class SupervisorAdmin(admin.ModelAdmin):
         # Manejar el caso especial del intervalo 00 (cada hora)
         if task_interval == 0:
             # Si estamos en el minuto 0, la próxima ejecución es en la siguiente hora
-            if current_time.minute == 0:
-                next_execution = current_time.replace(
-                    hour=current_time.hour + 1,
-                    minute=0,
-                    second=0,
-                    microsecond=0
-                )
-            else:
-                # Si no estamos en el minuto 0, la próxima ejecución es en la siguiente hora
-                next_execution = current_time.replace(
-                    hour=current_time.hour + 1,
-                    minute=0,
-                    second=0,
-                    microsecond=0
-                )
-            return next_execution
-        
-        # Para otros intervalos (15, 30, 45)
-        current_minutes = current_time.minute
-        intervals = [0, 15, 30, 45]
-        next_interval = None
-        
-        # Buscar el próximo intervalo válido
-        for interval in intervals:
-            if interval > current_minutes:
-                next_interval = interval
-                break
-        
-        # Si no encontramos un intervalo mayor, significa que el próximo es en la siguiente hora
-        if next_interval is None:
-            return current_time.replace(
+            next_execution = current_time.replace(
                 hour=current_time.hour + 1,
                 minute=0,
                 second=0,
                 microsecond=0
             )
+            return next_execution
         
-        # Si encontramos un intervalo válido, la próxima ejecución es en este mismo intervalo
-        return current_time.replace(
-            minute=next_interval,
-            second=0,
-            microsecond=0
-        )
+        # Para otros intervalos (15, 30, 45)
+        current_minutes = current_time.minute
+        current_hour = current_time.hour
+        
+        # Si el minuto actual es mayor o igual al intervalo de la tarea,
+        # la próxima ejecución será en la siguiente hora
+        if current_minutes >= task_interval:
+            next_execution = current_time.replace(
+                hour=current_hour + 1,
+                minute=task_interval,
+                second=0,
+                microsecond=0
+            )
+        else:
+            # Si no, la próxima ejecución será en esta misma hora
+            next_execution = current_time.replace(
+                minute=task_interval,
+                second=0,
+                microsecond=0
+            )
+            
+        return next_execution
 
     def changelist_view(self, request, extra_context=None):
         current_time = timezone.now()
@@ -276,7 +274,7 @@ class SupervisorAdmin(admin.ModelAdmin):
 
         for tarea in tareas:
             try:
-                intervalo = self.get_task_interval(task=tarea)
+                intervalo = self.get_task_interval(tarea)
                 intervalo_str = str(intervalo).zfill(2)
                 
                 if intervalo_str not in intervalos:

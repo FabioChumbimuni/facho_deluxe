@@ -86,30 +86,6 @@ def get_intervals_to_execute(time):
     current = get_current_interval(time)
     return [current]  # Solo ejecutar el intervalo actual
 
-def should_execute_task(tarea, ahora):
-    """
-    Determina si una tarea debe ejecutarse basado en su última ejecución e intervalo
-    """
-    # Limpiar el intervalo de paréntesis si los tiene
-    intervalo = tarea.intervalo.strip('()')
-    
-    # Si nunca se ha ejecutado, debe ejecutarse
-    if not tarea.ultima_ejecucion:
-        logger.info(f"[scheduler] Tarea {tarea.nombre} nunca ejecutada - ejecutando ahora")
-        return True
-    
-    # Calcular el próximo tiempo de ejecución basado en el intervalo
-    next_execution = get_next_interval_time(tarea.ultima_ejecucion, intervalo)
-    
-    should_run = ahora >= next_execution
-    
-    if should_run:
-        logger.info(f"[scheduler] Tarea {tarea.nombre} debe ejecutarse - última: {tarea.ultima_ejecucion}, próxima: {next_execution}, ahora: {ahora}")
-    else:
-        logger.info(f"[scheduler] Tarea {tarea.nombre} no debe ejecutarse aún - última: {tarea.ultima_ejecucion}, próxima: {next_execution}, ahora: {ahora}")
-    
-    return should_run
-
 @shared_task(name="snmp_scheduler.tasks._execute_bulk_and_next")
 def _execute_bulk_and_next(header_results, bulk_ids, modo_actual, modos_restantes):
     """
@@ -152,17 +128,14 @@ def _start_fase(header_results, modo_actual, modos_restantes):
     logger.info(f"[scheduler] Intervalos a ejecutar: {intervalos}")
 
     # Filtrar tareas candidatas para esta fase y el intervalo actual
-    qs = TareaSNMP.objects.filter(
+    tareas_a_ejecutar = TareaSNMP.objects.filter(
         activa=True,
         modo=modo_actual,
         intervalo=intervalo  # Buscar sin paréntesis
     )
     
-    logger.info(f"[scheduler] Encontradas {len(qs)} tareas para modo {modo_actual} en intervalo {intervalo}")
+    logger.info(f"[scheduler] Encontradas {len(tareas_a_ejecutar)} tareas para modo {modo_actual} en intervalo {intervalo}")
     
-    # Luego filtramos por tiempo de ejecución
-    tareas_a_ejecutar = [t for t in qs if should_execute_task(t, ahora)]
-
     desc_ids = [t.pk for t in tareas_a_ejecutar if t.tipo == "descubrimiento"]
     bulk_ids = [t.pk for t in tareas_a_ejecutar if t.tipo in TIPOS_BULK]
 
@@ -197,32 +170,5 @@ def ejecutar_tareas_programadas():
     intervalos = get_intervals_to_execute(ahora)
     logger.info(f"[scheduler] Intervalos a ejecutar: {intervalos}")
 
-    # Obtenemos candidatas únicamente en modo PRINCIPAL para el intervalo actual
-    qs = TareaSNMP.objects.filter(
-        activa=True,
-        modo="principal",
-        intervalo=intervalo  # Buscar sin paréntesis
-    )
-    
-    logger.info(f"[scheduler] Encontradas {len(qs)} tareas principales para intervalo {intervalo}")
-    
-    # Luego filtramos por tiempo de ejecución
-    tareas_a_ejecutar = [t for t in qs if should_execute_task(t, ahora)]
-
-    desc_ids = [t.pk for t in tareas_a_ejecutar if t.tipo == "descubrimiento"]
-    bulk_ids = [t.pk for t in tareas_a_ejecutar if t.tipo in TIPOS_BULK]
-
-    logger.info(f"[scheduler] Fase 'principal': {len(desc_ids)} discovery, {len(bulk_ids)} bulk")
-    logger.info(f"[scheduler] Tareas a ejecutar: {[t.nombre for t in tareas_a_ejecutar]}")
-
-    # Si no hay discovery principal, arrancamos bulk y luego resto de fases
-    if not desc_ids:
-        logger.info("[scheduler] No hay tareas discovery en fase principal, pasando a bulk y siguientes fases")
-        _execute_bulk_and_next.delay([], bulk_ids, "principal", ["modo", "secundario"])
-        return
-
-    # Si hay discovery, uso chord para esperarlos y luego bulk+fases siguientes
-    header = [ejecutar_descubrimiento.s(tid) for tid in desc_ids]
-    callback = _execute_bulk_and_next.s(bulk_ids, "principal", ["modo", "secundario"])
-    chord(header)(callback)
-    logger.info(f"[scheduler] Chord discovery fase='principal' lanzado")
+    # Iniciamos la cadena de ejecución con la fase 'principal'
+    _start_fase.delay([], 'principal', ['modo', 'secundario'])
