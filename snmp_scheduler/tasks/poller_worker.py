@@ -26,12 +26,21 @@ TIPO_A_CAMPO = {
     autoretry_for=(EasySNMPTimeoutError,),  # Solo reintentamos timeouts
     retry_backoff=30,
     max_retries=2,
-    soft_time_limit=120  # Aumentamos el límite de tiempo
+    soft_time_limit=120  # 2 minutos por lote
 )
 def poller_worker(self, tarea_id, ejecucion_id, indices):
+    """
+    Procesa un conjunto de índices SNMP para una tarea específica.
+    
+    Args:
+        tarea_id: ID de la TareaSNMP
+        ejecucion_id: ID de la EjecucionTareaSNMP
+        indices: Lista de índices SNMP a consultar
+    """
     close_old_connections()
 
     try:
+        # 1. Cargar tarea y ejecución
         tarea = TareaSNMP.objects.get(pk=tarea_id)
         ejec = EjecucionTareaSNMP.objects.get(pk=ejecucion_id)
 
@@ -58,16 +67,19 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         # Logs DEBUG después de validaciones
         logger.debug(f"[DEBUG] OID: {tarea.get_oid()}, Campo: {campo}")
         
-        # Configuración SNMP con timeout mínimo de 6 segundos
+        # Configuración SNMP con timeout ajustado según tipo
+        timeout = 10 if tarea.tipo == 'modelo_onu' else 6  # Mayor timeout para modelo_onu
+        retries = 2 if tarea.tipo == 'modelo_onu' else 1   # Más reintentos para modelo_onu
+        
         session = Session(
             hostname=tarea.host_ip,
             community=tarea.comunidad,
             version=2,
-            timeout=6,  # Timeout mínimo de 6 segundos
-            retries=1
+            timeout=timeout,
+            retries=retries
         )
 
-        # Mapeo de índices (usar host_name según modelo)
+        # Mapeo de índices
         recs = OnuDato.objects.filter(
             host=tarea.host_name,
             snmpindexonu__in=indices
@@ -85,18 +97,21 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         except EasySNMPTimeoutError as e:
             error_msg = f"Timeout SNMP en {tarea.host_ip}: {str(e)}"
             logger.error(error_msg)
-            # Registramos el error en la ejecución
             ejec.error = error_msg
             ejec.estado = 'F'
             ejec.fin = timezone.now()
             ejec.save()
-            # Registramos "No identificado" en los ONUs afectados
-            with transaction.atomic():
-                OnuDato.objects.filter(
-                    host=tarea.host_name,
-                    snmpindexonu__in=indices
-                ).update(**{campo: "No identificado", 'fecha': timezone.now()})
-            raise  # Permitimos el reintento
+            
+            # Para modelo_onu, marcar como "No identificado" sin borrar
+            if tarea.tipo == 'modelo_onu':
+                with transaction.atomic():
+                    OnuDato.objects.filter(
+                        host=tarea.host_name,
+                        snmpindexonu__in=indices
+                    ).update(**{campo: "No identificado", 'fecha': timezone.now()})
+                return {'updated': len(indices), 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
+            raise  # Para otros tipos, permitir reintento
+            
         except EasySNMPError as e:
             error_msg = f"Error SNMP en {tarea.host_ip}: {str(e)}"
             logger.error(error_msg)
@@ -104,12 +119,15 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             ejec.estado = 'F'
             ejec.fin = timezone.now()
             ejec.save()
-            # Registramos "No identificado" en los ONUs afectados
-            with transaction.atomic():
-                OnuDato.objects.filter(
-                    host=tarea.host_name,
-                    snmpindexonu__in=indices
-                ).update(**{campo: "No identificado", 'fecha': timezone.now()})
+            
+            # Para modelo_onu, marcar como "No identificado" sin borrar
+            if tarea.tipo == 'modelo_onu':
+                with transaction.atomic():
+                    OnuDato.objects.filter(
+                        host=tarea.host_name,
+                        snmpindexonu__in=indices
+                    ).update(**{campo: "No identificado", 'fecha': timezone.now()})
+                return {'updated': len(indices), 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
             return {'updated': 0, 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
 
         updated = deleted = 0
@@ -144,9 +162,22 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
 
             # Validación y actualización
             if not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
-                to_delete.append(onu_id)
-                deleted += 1
-                logger.debug(f"Borrando {onu_id} (valor inválido)")
+                if tarea.tipo == 'modelo_onu':
+                    # Para modelo_onu, marcar como "No identificado" en lugar de borrar
+                    try:
+                        with transaction.atomic():
+                            OnuDato.objects.filter(id=onu_id).update(
+                                **{campo: "No identificado", 'fecha': timezone.now()}
+                            )
+                            updated += 1
+                            logger.debug(f"Marcado como No identificado: {onu_id}")
+                    except Exception as e:
+                        errors.append(f"Error actualizando {onu_id}: {str(e)}")
+                else:
+                    # Para otros tipos, mantener el comportamiento de borrado
+                    to_delete.append(onu_id)
+                    deleted += 1
+                    logger.debug(f"Borrando {onu_id} (valor inválido)")
             else:
                 try:
                     with transaction.atomic():
@@ -159,15 +190,17 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
                     error_msg = f"Error BD: {str(e)}"
                     errors.append(error_msg)
                     logger.error(f"Fallo actualizando {onu_id}: {str(e)}")
-                    # Registramos "No identificado" para este ONU
-                    try:
-                        OnuDato.objects.filter(id=onu_id).update(
-                            **{campo: "No identificado", 'fecha': timezone.now()}
-                        )
-                    except:
-                        pass
+                    if tarea.tipo == 'modelo_onu':
+                        # Para modelo_onu, marcar como "No identificado" en caso de error
+                        try:
+                            OnuDato.objects.filter(id=onu_id).update(
+                                **{campo: "No identificado", 'fecha': timezone.now()}
+                            )
+                        except:
+                            pass
 
-        if to_delete:
+        # Ejecutar borrados solo si no es modelo_onu
+        if to_delete and tarea.tipo != 'modelo_onu':
             OnuDato.objects.filter(id__in=to_delete).delete()
             logger.info(f"Eliminados {len(to_delete)} registros")
 
