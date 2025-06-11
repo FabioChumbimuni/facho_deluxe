@@ -27,40 +27,43 @@ Configuración de todos los sub-tipos de Recolección Masiva de Datos.
 Cada clave es el valor que guardaremos en TareaSNMP.bulk_subtipo.
 """
 BULK_CONFIG = {
-    # Ya existente: descripción ONU
+    # Descubrimiento
+    'descubrimiento': {
+        'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.1',
+        'field': 'act_susp',
+    },
+    # Descripción ONU
     'onudesc': {
-        # El método de TareaSNMP que devuelve el OID base
-        'oid_base_attr': 'get_oid_onda_desc',  
-        # Nombre del campo en OnuDato que actualizaremos
+        'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
         'field': 'onudesc',
     },
-    # Estado (offline/online flag)
-    'estado': {
+    # Estado ONU
+    'estado_onu': {
         'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.15',
         'field': 'estado_onu',
     },
-    # Última desconexión
-    'last_disconnect': {
-        'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.24',
-        'field': 'ultima_desconexion',
+    # Plan ONU
+    'plan_onu': {
+        'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.7',
+        'field': 'plan_onu',
     },
-    # Potencia de retorno Rx
-    'potencia_rx': {
+    # Potencia RX
+    'pot_rx': {
         'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.51.1.6',
         'field': 'potencia_rx',
     },
-    # Potencia de retorno Tx
-    'potencia_tx': {
+    # Potencia TX
+    'pot_tx': {
         'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.51.1.4',
         'field': 'potencia_tx',
     },
     # Last Down Time
-    'last_down_time': {
+    'last_down_t': {
         'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.101.1.7',
         'field': 'last_down_time',
     },
     # Distancia
-    'distancia': {
+    'distancia_m': {
         'oid_base': '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.20',
         'field': 'distancia_m',
     },

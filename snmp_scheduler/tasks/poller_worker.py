@@ -12,7 +12,7 @@ TIPO_A_CAMPO = {
     'descubrimiento': 'act_susp',
     'onudesc': 'onudesc',
     'estado_onu': 'estado_onu',
-    'last_down': 'ultima_desconexion',
+    'plan_onu': 'plan_onu',  # Nuevo tipo para plan ONU
     'pot_rx': 'potencia_rx',
     'pot_tx': 'potencia_tx', 
     'last_down_t': 'last_down_time',
@@ -101,16 +101,7 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             ejec.estado = 'F'
             ejec.fin = timezone.now()
             ejec.save()
-            
-            # Para modelo_onu, marcar como "No identificado" sin borrar
-            if tarea.tipo == 'modelo_onu':
-                with transaction.atomic():
-                    OnuDato.objects.filter(
-                        host=tarea.host_name,
-                        snmpindexonu__in=indices
-                    ).update(**{campo: "No identificado", 'fecha': timezone.now()})
-                return {'updated': len(indices), 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
-            raise  # Para otros tipos, permitir reintento
+            raise  # Permitir reintento para todos los tipos
             
         except EasySNMPError as e:
             error_msg = f"Error SNMP en {tarea.host_ip}: {str(e)}"
@@ -119,15 +110,6 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             ejec.estado = 'F'
             ejec.fin = timezone.now()
             ejec.save()
-            
-            # Para modelo_onu, marcar como "No identificado" sin borrar
-            if tarea.tipo == 'modelo_onu':
-                with transaction.atomic():
-                    OnuDato.objects.filter(
-                        host=tarea.host_name,
-                        snmpindexonu__in=indices
-                    ).update(**{campo: "No identificado", 'fecha': timezone.now()})
-                return {'updated': len(indices), 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
             return {'updated': 0, 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
 
         updated = deleted = 0
@@ -151,28 +133,91 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             val = (var.value or "").strip().strip('"')
             
             if campo == 'distancia_m':
-                if val == "-1":
-                    val = "No Distancia"
-                else:
-                    try:
-                        km = float(val) / 1000
-                        val = f"{km:.3f} km"
-                    except:
-                        val = "Error formato"
+                try:
+                    onu_actual = OnuDato.objects.get(id=onu_id)
+                    valor_actual = getattr(onu_actual, campo)
+                    
+                    if val == "-1":
+                        if valor_actual and valor_actual != "No Distancia":
+                            # Si hay valor previo y no es "No Distancia", mantenerlo
+                            updated += 1
+                            logger.debug(f"Manteniendo distancia actual '{valor_actual}' para {onu_id}")
+                            continue
+                        elif not valor_actual:
+                            # Si no hay valor previo, poner "No Distancia"
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).update(
+                                    **{campo: "No Distancia"}
+                                )
+                                updated += 1
+                                logger.debug(f"Marcado como No Distancia (sin valor previo): {onu_id}")
+                            continue
+                    else:
+                        # Convertir a km solo si es un valor válido
+                        try:
+                            km = float(val) / 1000
+                            val = f"{km:.3f} km"
+                        except:
+                            if valor_actual and valor_actual != "No Distancia":
+                                # Si hay error de formato y hay valor previo, mantenerlo
+                                updated += 1
+                                logger.debug(f"Manteniendo distancia actual '{valor_actual}' por error de formato")
+                                continue
+                            val = "No Distancia"
+                except Exception as e:
+                    logger.error(f"Error procesando distancia para {onu_id}: {str(e)}")
+                    continue
+            elif campo == 'plan_onu':
+                try:
+                    onu_actual = OnuDato.objects.get(id=onu_id)
+                    valor_actual = getattr(onu_actual, campo)
+                    logger.info(f"[PLAN_ONU] Procesando ONU {onu_id} - Valor actual: '{valor_actual}', Valor nuevo: '{val}'")
+                    
+                    if val and val.lower() not in ('no such', 'nosuchinstance', 'nosuchobject'):
+                        # Si hay un valor nuevo válido, actualizarlo
+                        with transaction.atomic():
+                            OnuDato.objects.filter(id=onu_id).update(**{campo: val})
+                            updated += 1
+                            logger.debug(f"[PLAN_ONU] Actualizado plan_onu={val} ({onu_id})")
+                    elif valor_actual:
+                        # Si no hay valor nuevo pero hay valor actual, mantener el actual
+                        updated += 1
+                        logger.debug(f"[PLAN_ONU] Manteniendo plan actual '{valor_actual}' para {onu_id}")
+                    else:
+                        # Si no hay valor actual ni nuevo, poner No Plan
+                        nuevo_valor = "No Plan"
+                        with transaction.atomic():
+                            OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
+                            updated += 1
+                            logger.debug(f"[PLAN_ONU] Actualizado plan_onu={nuevo_valor} (no había valor) ({onu_id})")
+                except Exception as e:
+                    logger.error(f"Error procesando plan_onu para {onu_id}: {str(e)}")
+                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                    continue
 
-            # Validación y actualización
+            # Validación y actualización para otros tipos
             if not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
                 if tarea.tipo == 'modelo_onu':
-                    # Para modelo_onu, marcar como "No identificado" en lugar de borrar
+                    # Para modelo_onu, verificar si ya tiene un valor
                     try:
-                        with transaction.atomic():
-                            OnuDato.objects.filter(id=onu_id).update(
-                                **{campo: "No identificado", 'fecha': timezone.now()}
-                            )
+                        onu_actual = OnuDato.objects.get(id=onu_id)
+                        valor_actual = getattr(onu_actual, campo)
+                        
+                        if val == "" and valor_actual and valor_actual != "No identificado":
+                            # Si la consulta devuelve vacío y ya tiene un valor, mantener el valor actual
                             updated += 1
-                            logger.debug(f"Marcado como No identificado: {onu_id}")
+                            logger.debug(f"Manteniendo valor actual '{valor_actual}' para {onu_id}")
+                            continue
+                        elif not valor_actual:
+                            # Si no tiene valor, marcar como No identificado
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).update(
+                                    **{campo: "No identificado"}
+                                )
+                                updated += 1
+                                logger.debug(f"Marcado como No identificado (sin valor previo): {onu_id}")
                     except Exception as e:
-                        errors.append(f"Error actualizando {onu_id}: {str(e)}")
+                        errors.append(f"Error verificando valor actual de {onu_id}: {str(e)}")
                 else:
                     # Para otros tipos, mantener el comportamiento de borrado
                     to_delete.append(onu_id)
@@ -180,9 +225,10 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
                     logger.debug(f"Borrando {onu_id} (valor inválido)")
             else:
                 try:
+                    # Solo actualizar si hay un valor nuevo válido
                     with transaction.atomic():
                         OnuDato.objects.filter(id=onu_id).update(
-                            **{campo: val, 'fecha': timezone.now()}
+                            **{campo: val}
                         )
                         updated += 1
                         logger.debug(f"Actualizado {campo}={val} ({onu_id})")
@@ -190,14 +236,6 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
                     error_msg = f"Error BD: {str(e)}"
                     errors.append(error_msg)
                     logger.error(f"Fallo actualizando {onu_id}: {str(e)}")
-                    if tarea.tipo == 'modelo_onu':
-                        # Para modelo_onu, marcar como "No identificado" en caso de error
-                        try:
-                            OnuDato.objects.filter(id=onu_id).update(
-                                **{campo: "No identificado", 'fecha': timezone.now()}
-                            )
-                        except:
-                            pass
 
         # Ejecutar borrados solo si no es modelo_onu
         if to_delete and tarea.tipo != 'modelo_onu':

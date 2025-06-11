@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 # Lista de tipos permitidos (debe coincidir con TIPO_CHOICES en models.py)
 TIPOS_PERMITIDOS = [
     'onudesc', 'estado_onu', 'last_down', 'pot_rx', 
-    'pot_tx', 'last_down_t', 'distancia_m', 'modelo_onu'
+    'pot_tx', 'last_down_t', 'distancia_m', 'modelo_onu',
+    'plan_onu'  # Agregado plan_onu a los tipos permitidos
 ]
 
 @shared_task(

@@ -20,4 +20,5 @@ TASK_HANDLERS = {
     'distancia_m': ejecutar_bulk_wrapper,
     'modelo_onu': ejecutar_bulk_wrapper,
     'datos_bulk': ejecutar_bulk_wrapper,  # Por compatibilidad
+    'plan_onu': ejecutar_bulk_wrapper,  # Agregado plan_onu
 }

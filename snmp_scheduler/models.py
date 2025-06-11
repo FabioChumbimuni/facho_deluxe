@@ -25,7 +25,7 @@ class TareaSNMP(models.Model):
         ('descubrimiento',     'Descubrimiento'),
         ('onudesc',            'Descripción ONU'),
         ('estado_onu',         'Estado ONU'),
-        ('last_down',          'Última desconexión'),
+        ('plan_onu',           'Plan ONU'),
         ('pot_rx',             'Potencia RX'),
         ('pot_tx',             'Potencia TX'),
         ('last_down_t',        'Last Down Time'),
@@ -38,7 +38,7 @@ class TareaSNMP(models.Model):
         'descubrimiento':    '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.1',
         'onudesc':           '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9',
         'estado_onu':        '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.15',
-        'last_down':         '1.3.6.1.4.1.2011.6.128.1.1.2.46.1.24',
+        'plan_onu':          '1.3.6.1.4.1.2011.6.128.1.1.2.43.1.7',
         'pot_rx':            '1.3.6.1.4.1.2011.6.128.1.1.2.51.1.6',
         'pot_tx':            '1.3.6.1.4.1.2011.6.128.1.1.2.51.1.4',
         'last_down_t':       '1.3.6.1.4.1.2011.6.128.1.1.2.101.1.7',
@@ -119,7 +119,7 @@ class OnuDato(models.Model):
 
     # ——— Nuevos campos para cada subtipo bulk ———
     estado_onu         = models.CharField(max_length=50,  db_column='estado_onu',         null=True, blank=True)
-    ultima_desconexion = models.CharField(max_length=50,  db_column='ultima_desconexion', null=True, blank=True)
+    plan_onu           = models.CharField(max_length=50,  db_column='plan_onu',           null=True, blank=True)
     potencia_rx        = models.CharField(max_length=50,  db_column='potencia_rx',        null=True, blank=True)
     potencia_tx        = models.CharField(max_length=50,  db_column='potencia_tx',        null=True, blank=True)
     last_down_time     = models.CharField(max_length=50,  db_column='last_down_time',     null=True, blank=True)
