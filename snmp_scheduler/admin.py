@@ -33,17 +33,18 @@ class EjecucionTareaSNMPInline(admin.TabularInline):
 class TareaSNMPAdmin(admin.ModelAdmin):
     save_on_top = True
     inlines = [EjecucionTareaSNMPInline]
-    fields = ['nombre', 'host', 'tipo', 'intervalo', 'activa']
+    fields = ['nombre', 'host', 'tipo', 'modo', 'intervalo', 'activa']
     list_display = [
         'nombre',
         'host',
         'tipo',
+        'modo',
         'intervalo',
         'activa',
         'ultima_ejecucion',
         'estado_actual',
     ]
-    list_filter = ('tipo', 'intervalo', 'activa')
+    list_filter = ('tipo', 'modo', 'intervalo', 'activa')
     search_fields = ('nombre', 'host__nombre', 'host__ip')
     actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas', 'cambiar_intervalo_00', 'cambiar_intervalo_15', 'cambiar_intervalo_30', 'cambiar_intervalo_45']
 

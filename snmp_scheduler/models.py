@@ -67,6 +67,12 @@ class TareaSNMP(models.Model):
     nombre = models.CharField(max_length=100, verbose_name='Nombre de la Tarea')
     host = models.ForeignKey(Host, on_delete=models.CASCADE, verbose_name='Host')
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, verbose_name='Tipo de Tarea')
+    modo = models.CharField(
+        max_length=20,
+        choices=MODO_CHOICES,
+        default='principal',
+        verbose_name='Modo de Ejecución'
+    )
     intervalo = models.CharField(
         max_length=2,
         choices=INTERVALO_CHOICES,
