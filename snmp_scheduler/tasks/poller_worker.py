@@ -135,37 +135,33 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             if campo == 'distancia_m':
                 try:
                     onu_actual = OnuDato.objects.get(id=onu_id)
-                    valor_actual = getattr(onu_actual, campo)
-                    
-                    if val == "-1":
-                        if valor_actual and valor_actual != "No Distancia":
-                            # Si hay valor previo y no es "No Distancia", mantenerlo
-                            updated += 1
-                            logger.debug(f"Manteniendo distancia actual '{valor_actual}' para {onu_id}")
-                            continue
-                        elif not valor_actual:
-                            # Si no hay valor previo, poner "No Distancia"
-                            with transaction.atomic():
-                                OnuDato.objects.filter(id=onu_id).update(
-                                    **{campo: "No Distancia"}
-                                )
-                                updated += 1
-                                logger.debug(f"Marcado como No Distancia (sin valor previo): {onu_id}")
-                            continue
-                    else:
-                        # Convertir a km solo si es un valor válido
+                    valor_actual = getattr(onu_actual, campo, None)
+
+                    # Si el valor no es -1, convertir a km y actualizar
+                    if val != "-1":
                         try:
                             km = float(val) / 1000
-                            val = f"{km:.3f} km"
-                        except:
-                            if valor_actual and valor_actual != "No Distancia":
-                                # Si hay error de formato y hay valor previo, mantenerlo
+                            nuevo_valor = f"{km:.3f} km"
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
                                 updated += 1
-                                logger.debug(f"Manteniendo distancia actual '{valor_actual}' por error de formato")
-                                continue
-                            val = "No Distancia"
+                                logger.debug(f"[DISTANCIA] Actualizado a {nuevo_valor} para {onu_id}")
+                        except ValueError:
+                            logger.error(f"Error convirtiendo distancia para {onu_id}")
+                    else:
+                        # Si es -1 y el valor actual también es -1, cambiar a No Distancia
+                        if valor_actual == "-1":
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).update(**{campo: "No Distancia"})
+                                updated += 1
+                                logger.debug(f"[DISTANCIA] Cambiado de -1 a No Distancia para {onu_id}")
+                        else:
+                            # Si es -1 pero el valor actual es diferente, mantener el valor actual
+                            logger.debug(f"[DISTANCIA] Valor -1 recibido, manteniendo valor actual '{valor_actual}' para {onu_id}")
+
                 except Exception as e:
                     logger.error(f"Error procesando distancia para {onu_id}: {str(e)}")
+                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
                     continue
             elif campo == 'plan_onu':
                 try:
@@ -224,18 +220,19 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
                     deleted += 1
                     logger.debug(f"Borrando {onu_id} (valor inválido)")
             else:
-                try:
-                    # Solo actualizar si hay un valor nuevo válido
-                    with transaction.atomic():
-                        OnuDato.objects.filter(id=onu_id).update(
-                            **{campo: val}
-                        )
-                        updated += 1
-                        logger.debug(f"Actualizado {campo}={val} ({onu_id})")
-                except Exception as e:
-                    error_msg = f"Error BD: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"Fallo actualizando {onu_id}: {str(e)}")
+                # Solo actualizar si no es campo de distancia (ya que se maneja arriba)
+                if campo != 'distancia_m':
+                    try:
+                        with transaction.atomic():
+                            OnuDato.objects.filter(id=onu_id).update(
+                                **{campo: val}
+                            )
+                            updated += 1
+                            logger.debug(f"Actualizado {campo}={val} ({onu_id})")
+                    except Exception as e:
+                        error_msg = f"Error BD: {str(e)}"
+                        errors.append(error_msg)
+                        logger.error(f"Fallo actualizando {onu_id}: {str(e)}")
 
         # Ejecutar borrados solo si no es modelo_onu
         if to_delete and tarea.tipo != 'modelo_onu':
