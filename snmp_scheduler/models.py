@@ -6,6 +6,23 @@ from django.core.exceptions import ValidationError
 
 # snmp_scheduler/models.py (sólo la sección de TareaSNMP)
 
+class Host(models.Model):
+    nombre = models.CharField(max_length=100, verbose_name='Nombre del Host')
+    ip = models.GenericIPAddressField(verbose_name='IP del OLT')
+    comunidad = models.CharField(max_length=50, default='publica', verbose_name='Comunidad SNMP')
+    descripcion = models.TextField(blank=True, null=True, verbose_name='Descripción')
+    activo = models.BooleanField(default=True, verbose_name='Activo')
+    fecha_creacion = models.DateTimeField(auto_now_add=True, null=True, verbose_name='Fecha de Creación')
+    fecha_modificacion = models.DateTimeField(auto_now=True, null=True, verbose_name='Última Modificación')
+
+    class Meta:
+        verbose_name = 'Host'
+        verbose_name_plural = 'Hosts'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return f"{self.nombre} ({self.ip})"
+
 class TareaSNMP(models.Model):
     INTERVALO_CHOICES = [
         ('00', '(00)'),
@@ -47,54 +64,48 @@ class TareaSNMP(models.Model):
     
     }
 
-    nombre           = models.CharField(max_length=100, verbose_name="Nombre de la Tarea")
-    host_name        = models.CharField(max_length=50,  verbose_name="Nombre del Host")
-    host_ip          = models.GenericIPAddressField(protocol='IPv4', verbose_name="IP del OLT")
-    comunidad        = models.CharField(max_length=50,  default='public', verbose_name="Comunidad SNMP")
-    tipo             = models.CharField(max_length=20, choices=TIPO_CHOICES, default='descubrimiento')
-    intervalo        = models.CharField(max_length=10, choices=INTERVALO_CHOICES, default='00')
-    modo             = models.CharField(max_length=20, choices=MODO_CHOICES, default='principal')
-    activa           = models.BooleanField(default=True, verbose_name="Tarea Activa")
-    ultima_ejecucion = models.DateTimeField(null=True, blank=True)
+    nombre = models.CharField(max_length=100, verbose_name='Nombre de la Tarea')
+    host = models.ForeignKey(Host, on_delete=models.CASCADE, verbose_name='Host')
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, verbose_name='Tipo de Tarea')
+    intervalo = models.CharField(
+        max_length=2,
+        choices=INTERVALO_CHOICES,
+        default='00',
+        verbose_name='Intervalo'
+    )
+    activa = models.BooleanField(default=True, verbose_name='Activa')
+    fecha_creacion = models.DateTimeField(auto_now_add=True, null=True, verbose_name='Fecha de Creación')
+    fecha_modificacion = models.DateTimeField(auto_now=True, null=True, verbose_name='Última Modificación')
     registros_activos = models.PositiveIntegerField(
         default=0,
         verbose_name="ONUs Registradas",
         help_text="Contador actualizado automáticamente"
     )
 
-    oid_consulta = models.CharField(
-        max_length=255,
-        blank=True,
-        editable=False,
-        verbose_name="OID Automático"
-    )
+    ultima_ejecucion = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        verbose_name = "Tarea SNMP"
-        constraints = [
-            models.UniqueConstraint(
-                fields=['host_ip', 'intervalo', 'modo'],
-                condition=models.Q(modo__in=['principal', 'modo']),
-                name='unique_principal_modo'
-            ),
-            models.UniqueConstraint(
-                fields=['host_ip', 'intervalo', 'modo', 'tipo'],
-                condition=models.Q(modo='secundario'),
-                name='unique_secundario_por_tipo'
-            ),
-        ]
+        verbose_name = 'Tarea SNMP'
+        verbose_name_plural = 'Tareas SNMP'
+        ordering = ['nombre']
 
     def __str__(self):
-        tipo_display = dict(self.TIPO_CHOICES).get(self.tipo, self.tipo)
-        return f"{self.nombre} - {tipo_display} ({self.host_name})"
+        return f"{self.nombre} - {self.host.nombre}"
 
-    def save(self, *args, **kwargs):
-        # Asignamos el OID automático según el tipo elegido
-        self.oid_consulta = self.BULK_OIDS.get(self.tipo, '')
-        super().save(*args, **kwargs)
+    @property
+    def host_name(self):
+        return self.host.nombre
+
+    @property
+    def host_ip(self):
+        return self.host.ip
+
+    @property
+    def comunidad(self):
+        return self.host.comunidad
 
     def get_oid(self):
-        return self.oid_consulta
+        return self.BULK_OIDS.get(self.tipo, '')
 
 
 

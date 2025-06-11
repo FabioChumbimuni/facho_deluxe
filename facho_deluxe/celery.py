@@ -40,9 +40,9 @@ app.conf.beat_schedule = {
 }
 
 app.conf.beat_schedule.update({
-    'actualizar-onu-meta-cada-10-min': {
+    'actualizar-onu-meta-cada-2-min': {
         'task': 'snmp_scheduler.tasks.update_onu_meta',
-        'schedule': crontab(minute='*/10'),
+        'schedule': crontab(minute='*/2'),
         'options': {'queue': 'principal'},
     },
 })

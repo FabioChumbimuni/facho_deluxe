@@ -38,7 +38,7 @@ def ejecutar_descubrimiento(self, tarea_id):
             timeout=6,
             retries=1
         )
-        base_oid = tarea.oid_consulta 
+        base_oid = tarea.get_oid()
 
         # 4) Hacer walk completo sobre el OID base
         try:

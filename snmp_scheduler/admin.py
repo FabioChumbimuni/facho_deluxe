@@ -10,7 +10,7 @@ from django.contrib.postgres.aggregates import ArrayAgg
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.timezone import localtime
-from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato
+from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato, Host
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
 from datetime import timedelta
@@ -33,19 +33,18 @@ class EjecucionTareaSNMPInline(admin.TabularInline):
 class TareaSNMPAdmin(admin.ModelAdmin):
     save_on_top = True
     inlines = [EjecucionTareaSNMPInline]
-    fields = ['nombre', 'host_name', 'host_ip', 'comunidad', 'tipo', 'intervalo', 'modo', 'activa']
+    fields = ['nombre', 'host', 'tipo', 'intervalo', 'activa']
     list_display = [
         'nombre',
-        'host_ip',
+        'host',
         'tipo',
         'intervalo',
-        'modo',
         'activa',
         'ultima_ejecucion',
         'estado_actual',
     ]
-    list_filter = ('tipo', 'intervalo', 'modo', 'activa')
-    search_fields = ('nombre', 'host_ip')
+    list_filter = ('tipo', 'intervalo', 'activa')
+    search_fields = ('nombre', 'host__nombre', 'host__ip')
     actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas', 'cambiar_intervalo_00', 'cambiar_intervalo_15', 'cambiar_intervalo_30', 'cambiar_intervalo_45']
 
     def get_urls(self):
@@ -294,7 +293,7 @@ class SupervisorAdmin(admin.ModelAdmin):
                 tarea_info = {
                     'id': tarea.id,
                     'nombre': tarea.nombre,
-                    'host_ip': tarea.host_ip,
+                    'host_ip': tarea.host.ip,
                     'tipo': tarea.get_tipo_display(),
                     'modo': tarea.get_modo_display(),
                     'estado': estado,
@@ -330,15 +329,15 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
         'estado', 
         'duracion'
     )
-    list_filter = ('estado', 'tarea__host_name', 'tarea__tipo')
-    search_fields = ('tarea__nombre', 'error', 'tarea__host_ip')
+    list_filter = ('estado', 'tarea__host__nombre', 'tarea__tipo')
+    search_fields = ('tarea__nombre', 'error', 'tarea__host__ip')
     
     def nombre_tarea(self, obj):
         return obj.tarea.nombre
     nombre_tarea.short_description = "Tarea"
 
     def host_ip(self, obj):
-        return obj.tarea.host_ip
+        return obj.tarea.host.ip
     host_ip.short_description = "IP OLT"
 
     def tipo_tarea(self, obj):
@@ -449,3 +448,20 @@ class OnuDatoAdmin(admin.ModelAdmin):
             models.Index(fields=['host', 'modelo_onu']),
             models.Index(fields=['distancia_m']),
         ]
+
+@admin.register(Host)
+class HostAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'ip', 'comunidad', 'activo', 'fecha_creacion')
+    list_filter = ('activo',)
+    search_fields = ('nombre', 'ip')
+    ordering = ('nombre',)
+    date_hierarchy = 'fecha_creacion'
+    
+    fieldsets = (
+        ('Información Principal', {
+            'fields': ('nombre', 'ip', 'comunidad', 'descripcion')
+        }),
+        ('Estado', {
+            'fields': ('activo',)
+        }),
+    )
