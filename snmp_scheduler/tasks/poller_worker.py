@@ -144,13 +144,17 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
             onu_id = idx_to_id[idx]
             val = (var.value or "").strip().strip('"')
             
-            # Verificar si es un error de "No Such Instance"
-            if val.lower() == "no such instance currently exists at this oid":
+            # Verificar si es un error de "No Such Instance" o similar
+            if (val.lower() in ["no such instance currently exists at this oid", 
+                              "no such instance", 
+                              "nosuchinstance", 
+                              "nosuchobject"] or 
+                "no such" in val.lower()):
                 try:
                     with transaction.atomic():
                         OnuDato.objects.filter(id=onu_id).delete()
                         deleted += 1
-                        logger.debug(f"[DELETE] Eliminada ONU {onu_id} por No Such Instance")
+                        logger.debug(f"[DELETE] Eliminada ONU {onu_id} por No Such Instance. Valor recibido: '{val}'")
                         continue
                 except Exception as e:
                     logger.error(f"Error eliminando ONU {onu_id}: {str(e)}")
