@@ -130,14 +130,14 @@ def _start_fase(header_results, modo_actual, modos_restantes):
     # Filtrar tareas candidatas para esta fase y el intervalo actual
     tareas_a_ejecutar = TareaSNMP.objects.filter(
         activa=True,
-        modo=modo_actual,
-        intervalo=intervalo  # Buscar sin paréntesis
+        trabajo__modo=modo_actual,
+        trabajo__intervalo=intervalo  # Buscar sin paréntesis
     )
     
     logger.info(f"[scheduler] Encontradas {len(tareas_a_ejecutar)} tareas para modo {modo_actual} en intervalo {intervalo}")
     
-    desc_ids = [t.pk for t in tareas_a_ejecutar if t.tipo == "descubrimiento"]
-    bulk_ids = [t.pk for t in tareas_a_ejecutar if t.tipo in TIPOS_BULK]
+    desc_ids = [t.pk for t in tareas_a_ejecutar if t.trabajo.tipo == "descubrimiento"]
+    bulk_ids = [t.pk for t in tareas_a_ejecutar if t.trabajo.tipo in TIPOS_BULK]
 
     logger.info(f"[scheduler] Fase '{modo_actual}': {len(desc_ids)} discovery, {len(bulk_ids)} bulk")
     logger.info(f"[scheduler] Tareas a ejecutar en modo {modo_actual}: {[t.nombre for t in tareas_a_ejecutar]}")

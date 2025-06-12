@@ -10,7 +10,7 @@ from django.contrib.postgres.aggregates import ArrayAgg
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.timezone import localtime
-from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato, Host
+from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato, Host, TrabajoSNMP
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
 from datetime import timedelta
@@ -29,24 +29,39 @@ class EjecucionTareaSNMPInline(admin.TabularInline):
     readonly_fields = ('inicio', 'fin', 'estado', 'resultado', 'error')
     can_delete = False
 
+@admin.register(TrabajoSNMP)
+class TrabajoSNMPAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'tipo', 'modo', 'intervalo', 'activo')
+    list_filter = ('tipo', 'modo', 'intervalo', 'activo')
+    search_fields = ('nombre',)
+    ordering = ('nombre',)
+    fieldsets = (
+        ('Información Principal', {
+            'fields': ('nombre', 'tipo', 'modo', 'intervalo')
+        }),
+        ('Estado', {
+            'fields': ('activo',)
+        }),
+    )
+
 @admin.register(TareaSNMP)
 class TareaSNMPAdmin(admin.ModelAdmin):
     save_on_top = True
     inlines = [EjecucionTareaSNMPInline]
-    fields = ['nombre', 'host', 'tipo', 'modo', 'intervalo', 'activa']
+    fields = ['nombre', 'host', 'trabajo', 'activa']
     list_display = [
         'nombre',
         'host',
-        'tipo',
-        'modo',
+        'get_tipo_display',
+        'get_modo_display',
         'intervalo',
         'activa',
         'ultima_ejecucion',
         'estado_actual',
     ]
-    list_filter = ('tipo', 'modo', 'intervalo', 'activa')
+    list_filter = ('trabajo__tipo', 'trabajo__modo', 'trabajo__intervalo', 'activa')
     search_fields = ('nombre', 'host__nombre', 'host__ip')
-    actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas', 'cambiar_intervalo_00', 'cambiar_intervalo_15', 'cambiar_intervalo_30', 'cambiar_intervalo_45']
+    actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas']
 
     def get_urls(self):
         urls = super().get_urls()
@@ -87,26 +102,6 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         count = queryset.update(activa=False)
         self.message_user(request, f"⏸️ {count} tareas desactivadas")
     desactivar_tareas.short_description = "Desactivar tareas seleccionadas"
-
-    def cambiar_intervalo_00(self, request, queryset):
-        count = queryset.update(intervalo='00')
-        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 00")
-    cambiar_intervalo_00.short_description = "Cambiar a intervalo 00"
-
-    def cambiar_intervalo_15(self, request, queryset):
-        count = queryset.update(intervalo='15')
-        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 15")
-    cambiar_intervalo_15.short_description = "Cambiar a intervalo 15"
-
-    def cambiar_intervalo_30(self, request, queryset):
-        count = queryset.update(intervalo='30')
-        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 30")
-    cambiar_intervalo_30.short_description = "Cambiar a intervalo 30"
-
-    def cambiar_intervalo_45(self, request, queryset):
-        count = queryset.update(intervalo='45')
-        self.message_user(request, f"✅ {count} tareas cambiadas al intervalo 45")
-    cambiar_intervalo_45.short_description = "Cambiar a intervalo 45"
 
     def estado_actual(self, obj):
         última = obj.ejecuciones.first()
@@ -330,7 +325,7 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
         'estado', 
         'duracion'
     )
-    list_filter = ('estado', 'tarea__host__nombre', 'tarea__tipo')
+    list_filter = ('estado', 'tarea__host__nombre', 'tarea__trabajo__tipo')
     search_fields = ('tarea__nombre', 'error', 'tarea__host__ip')
     
     def nombre_tarea(self, obj):
@@ -342,7 +337,7 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
     host_ip.short_description = "IP OLT"
 
     def tipo_tarea(self, obj):
-        return obj.tarea.get_tipo_display()
+        return obj.tarea.trabajo.get_tipo_display()
     tipo_tarea.short_description = "Tipo"
 
     readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
