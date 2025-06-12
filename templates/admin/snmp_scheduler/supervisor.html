@@ -165,10 +165,6 @@
             <div class="task-name">{{ tarea.nombre }}</div>
             <div class="task-meta">
               <div class="task-meta-item">
-                <span class="task-meta-label">📍 IP:</span>
-                {{ tarea.host_ip }}
-              </div>
-              <div class="task-meta-item">
                 <span class="task-meta-label">📊 Tipo:</span>
                 {{ tarea.tipo }}
               </div>
@@ -199,7 +195,9 @@
           {% endfor %}
         </div>
       {% else %}
-        <p class="no-tasks">No hay tareas en este intervalo</p>
+        <div class="no-tasks">
+          No hay tareas programadas para este intervalo
+        </div>
       {% endif %}
     </div>
     {% endfor %}

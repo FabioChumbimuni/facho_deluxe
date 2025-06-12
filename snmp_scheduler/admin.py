@@ -146,13 +146,13 @@ class SupervisorAdmin(admin.ModelAdmin):
     def ejecutar_tarea(self, request, tarea_id):
         try:
             tarea = TareaSNMP.objects.get(pk=tarea_id)
-            handler = TASK_HANDLERS.get(tarea.tipo)
+            handler = TASK_HANDLERS.get(tarea.trabajo.tipo)
             if handler:
                 # Forzar la ejecución inmediata
                 handler.apply_async(args=[tarea_id], countdown=0)
                 self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución")
             else:
-                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
+                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.trabajo.tipo}", level='warning')
         except TareaSNMP.DoesNotExist:
             self.message_user(request, f"❌ La tarea con ID {tarea_id} no existe", level='error')
         
@@ -160,9 +160,9 @@ class SupervisorAdmin(admin.ModelAdmin):
         return HttpResponseRedirect(reverse('admin:snmp_scheduler_supervisor_changelist'))
 
     def get_task_interval(self, task):
-        """Determina el intervalo basado en el campo intervalo de la tarea"""
+        """Determina el intervalo basado en el campo intervalo del trabajo"""
         try:
-            intervalo = task.intervalo.strip('()')
+            intervalo = task.trabajo.intervalo.strip('()')
             # Manejar el caso especial de '00'
             if intervalo == '00' or intervalo == '0':
                 return 0
@@ -265,7 +265,7 @@ class SupervisorAdmin(admin.ModelAdmin):
                     )
                 )[:1]
             )
-        ).order_by('intervalo', 'nombre')
+        ).order_by('trabajo__intervalo', 'nombre')
 
         # Organizar tareas por intervalos
         intervalos = {
@@ -297,9 +297,8 @@ class SupervisorAdmin(admin.ModelAdmin):
                 tarea_info = {
                     'id': tarea.id,
                     'nombre': tarea.nombre,
-                    'host_ip': tarea.host.ip,
-                    'tipo': tarea.get_tipo_display(),
-                    'modo': tarea.get_modo_display(),
+                    'tipo': tarea.trabajo.get_tipo_display(),
+                    'modo': tarea.trabajo.get_modo_display(),
                     'estado': estado,
                     'ultima_ejecucion': localtime(ultima_ejecucion).strftime('%d/%m/%Y %H:%M') if ultima_ejecucion else 'No ejecutada',
                     'duracion': str(tarea.duracion).split('.')[0] if tarea.duracion else '--',

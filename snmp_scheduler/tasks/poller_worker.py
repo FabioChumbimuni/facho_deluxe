@@ -144,37 +144,71 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
             onu_id = idx_to_id[idx]
             val = (var.value or "").strip().strip('"')
             
+            # Verificar si es un error de "No Such Instance"
+            if val.lower() == "no such instance currently exists at this oid":
+                try:
+                    with transaction.atomic():
+                        OnuDato.objects.filter(id=onu_id).delete()
+                        deleted += 1
+                        logger.debug(f"[DELETE] Eliminada ONU {onu_id} por No Such Instance")
+                        continue
+                except Exception as e:
+                    logger.error(f"Error eliminando ONU {onu_id}: {str(e)}")
+                    errors.append(f"Error eliminando ONU {onu_id}: {str(e)}")
+                    continue
+
+            # Procesamiento específico por tipo de campo
             if campo == 'distancia_m':
                 try:
-                    onu_actual = OnuDato.objects.get(id=onu_id)
-                    valor_actual = getattr(onu_actual, campo, None)
+                    # Limpiar el valor recibido
+                    val = val.strip() if val else ""
 
-                    # Si el valor no es -1, convertir a km y actualizar
-                    if val != "-1":
-                        try:
-                            km = float(val) / 1000
+                    # Obtener el valor actual
+                    onu_actual = OnuDato.objects.get(id=onu_id)
+                    valor_actual = getattr(onu_actual, campo)
+
+                    # Si el valor es -1
+                    if val == "-1":
+                        if not valor_actual:
+                            # Si no hay valor actual, poner No Distancia
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).update(**{campo: "No Distancia"})
+                                updated += 1
+                                logger.debug(f"[DISTANCIA] Actualizado a No Distancia para {onu_id} (valor inicial)")
+                        else:
+                            # Si hay valor actual, mantenerlo
+                            logger.debug(f"[DISTANCIA] Valor -1 recibido, manteniendo valor actual '{valor_actual}' para {onu_id}")
+                        continue
+
+                    # Si el valor no es -1
+                    try:
+                        # Verificar si ya tiene formato de kilómetros
+                        if '.' in val:
+                            nuevo_valor = f"{val} km"
+                        else:
+                            # Si es un valor en metros, convertir a kilómetros
+                            metros = float(val)
+                            km = metros / 1000
                             nuevo_valor = f"{km:.3f} km"
+
+                        # Solo actualizar si el valor actual es "No Distancia" o no existe
+                        if not valor_actual or valor_actual == "No Distancia":
                             with transaction.atomic():
                                 OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
                                 updated += 1
                                 logger.debug(f"[DISTANCIA] Actualizado a {nuevo_valor} para {onu_id}")
-                        except ValueError:
-                            logger.error(f"Error convirtiendo distancia para {onu_id}")
-                    else:
-                        # Si es -1 y el valor actual también es -1, cambiar a No Distancia
-                        if valor_actual == "-1":
-                            with transaction.atomic():
-                                OnuDato.objects.filter(id=onu_id).update(**{campo: "No Distancia"})
-                                updated += 1
-                                logger.debug(f"[DISTANCIA] Cambiado de -1 a No Distancia para {onu_id}")
                         else:
-                            # Si es -1 pero el valor actual es diferente, mantener el valor actual
-                            logger.debug(f"[DISTANCIA] Valor -1 recibido, manteniendo valor actual '{valor_actual}' para {onu_id}")
+                            logger.debug(f"[DISTANCIA] Manteniendo valor actual '{valor_actual}' para {onu_id}")
+
+                    except ValueError:
+                        logger.error(f"Error procesando distancia para {onu_id}: valor={val}")
+                        errors.append(f"Error procesando distancia para ONU {onu_id}")
 
                 except Exception as e:
                     logger.error(f"Error procesando distancia para {onu_id}: {str(e)}")
                     errors.append(f"Error en ONU {onu_id}: {str(e)}")
                     continue
+
             elif campo == 'plan_onu':
                 try:
                     onu_actual = OnuDato.objects.get(id=onu_id)
@@ -203,33 +237,31 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
                     errors.append(f"Error en ONU {onu_id}: {str(e)}")
                     continue
 
-            # Validación y actualización para otros tipos
-            if not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
-                if tarea.trabajo.tipo == 'modelo_onu':
-                    # Para modelo_onu, verificar si ya tiene un valor
-                    try:
-                        onu_actual = OnuDato.objects.get(id=onu_id)
-                        valor_actual = getattr(onu_actual, campo)
-                        if not valor_actual:
-                            # Si no tiene valor, marcar como No Modelo
-                            with transaction.atomic():
-                                OnuDato.objects.filter(id=onu_id).update(**{campo: "No Modelo"})
-                                updated += 1
-                                logger.debug(f"[MODELO] Actualizado a No Modelo para {onu_id}")
-                    except Exception as e:
-                        logger.error(f"Error procesando modelo para {onu_id}: {str(e)}")
-                        errors.append(f"Error en ONU {onu_id}: {str(e)}")
-                continue
+            elif tarea.trabajo.tipo == 'modelo_onu' and (not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT')):
+                try:
+                    onu_actual = OnuDato.objects.get(id=onu_id)
+                    valor_actual = getattr(onu_actual, campo)
+                    if not valor_actual:
+                        # Si no tiene valor, marcar como No Modelo
+                        with transaction.atomic():
+                            OnuDato.objects.filter(id=onu_id).update(**{campo: "No Modelo"})
+                            updated += 1
+                            logger.debug(f"[MODELO] Actualizado a No Modelo para {onu_id}")
+                except Exception as e:
+                    logger.error(f"Error procesando modelo para {onu_id}: {str(e)}")
+                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                    continue
 
             # Actualización normal para otros tipos
-            try:
-                with transaction.atomic():
-                    OnuDato.objects.filter(id=onu_id).update(**{campo: val})
-                    updated += 1
-                    logger.debug(f"[NORMAL] Actualizado {campo}={val} ({onu_id})")
-            except Exception as e:
-                logger.error(f"Error actualizando {campo} para {onu_id}: {str(e)}")
-                errors.append(f"Error en ONU {onu_id}: {str(e)}")
+            elif val and 'no such' not in val.lower() and val.upper() not in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
+                try:
+                    with transaction.atomic():
+                        OnuDato.objects.filter(id=onu_id).update(**{campo: val})
+                        updated += 1
+                        logger.debug(f"[NORMAL] Actualizado {campo}={val} ({onu_id})")
+                except Exception as e:
+                    logger.error(f"Error actualizando {campo} para {onu_id}: {str(e)}")
+                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
 
         return {
             'updated': updated,
