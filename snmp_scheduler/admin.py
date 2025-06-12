@@ -48,10 +48,10 @@ class TrabajoSNMPAdmin(admin.ModelAdmin):
 class TareaSNMPAdmin(admin.ModelAdmin):
     save_on_top = True
     inlines = [EjecucionTareaSNMPInline]
-    fields = ['nombre', 'host', 'trabajo', 'activa']
+    fields = ['nombre', 'hosts', 'trabajo', 'activa']
     list_display = [
         'nombre',
-        'host',
+        'host_list',
         'get_tipo_display',
         'get_modo_display',
         'intervalo',
@@ -59,9 +59,14 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         'ultima_ejecucion',
         'estado_actual',
     ]
-    list_filter = ('trabajo__tipo', 'trabajo__modo', 'trabajo__intervalo', 'activa')
-    search_fields = ('nombre', 'host__nombre', 'host__ip')
+    list_filter = ('trabajo__tipo', 'trabajo__modo', 'trabajo__intervalo', 'activa', 'hosts')
+    search_fields = ('nombre', 'hosts__nombre', 'hosts__ip')
     actions = ['ejecutar_ahora', 'activar_tareas', 'desactivar_tareas']
+    filter_horizontal = ('hosts',)
+
+    def host_list(self, obj):
+        return ", ".join([h.nombre for h in obj.hosts.all()[:3]])
+    host_list.short_description = "Hosts"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -75,22 +80,25 @@ class TareaSNMPAdmin(admin.ModelAdmin):
     def ejecutar_tarea(self, request, tarea_id):
         try:
             tarea = TareaSNMP.objects.get(pk=tarea_id)
-            handler = TASK_HANDLERS.get(tarea.tipo)
+            handler = TASK_HANDLERS.get(tarea.trabajo.tipo)
             if handler:
-                handler.apply_async(args=[tarea_id])
-                self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución")
+                # Ejecutar para cada host
+                for host in tarea.hosts.all():
+                    handler.apply_async(args=[tarea_id, host.id])
+                self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución para {tarea.hosts.count()} hosts")
             else:
-                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.tipo}", level='warning')
+                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.trabajo.tipo}", level='warning')
         except TareaSNMP.DoesNotExist:
             self.message_user(request, f"❌ La tarea con ID {tarea_id} no existe", level='error')
         return HttpResponseRedirect(request.META.get('HTTP_REFERER', '../'))
 
     def ejecutar_ahora(self, request, queryset):
         for tarea in queryset:
-            handler = TASK_HANDLERS.get(tarea.tipo)
+            handler = TASK_HANDLERS.get(tarea.trabajo.tipo)
             if handler:
-                handler.apply_async(args=[tarea.id])
-        self.message_user(request, f"🚀 {queryset.count()} tareas encoladas")
+                for host in tarea.hosts.all():
+                    handler.apply_async(args=[tarea.id, host.id])
+        self.message_user(request, f"🚀 Tareas encoladas para {queryset.count()} tareas")
     ejecutar_ahora.short_description = "Ejecutar selección ahora"
 
     def activar_tareas(self, request, queryset):
@@ -318,6 +326,7 @@ class SupervisorAdmin(admin.ModelAdmin):
 class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
     list_display = (
         'nombre_tarea',
+        'host_nombre',
         'host_ip', 
         'tipo_tarea', 
         'inicio', 
@@ -325,22 +334,26 @@ class EjecucionTareaSNMPAdmin(admin.ModelAdmin):
         'estado', 
         'duracion'
     )
-    list_filter = ('estado', 'tarea__host__nombre', 'tarea__trabajo__tipo')
-    search_fields = ('tarea__nombre', 'error', 'tarea__host__ip')
+    list_filter = ('estado', 'host', 'tarea__trabajo__tipo')
+    search_fields = ('tarea__nombre', 'error', 'host__ip', 'host__nombre')
     
     def nombre_tarea(self, obj):
         return obj.tarea.nombre
     nombre_tarea.short_description = "Tarea"
 
+    def host_nombre(self, obj):
+        return obj.host.nombre
+    host_nombre.short_description = "Host"
+
     def host_ip(self, obj):
-        return obj.tarea.host.ip
+        return obj.host.ip
     host_ip.short_description = "IP OLT"
 
     def tipo_tarea(self, obj):
         return obj.tarea.trabajo.get_tipo_display()
     tipo_tarea.short_description = "Tipo"
 
-    readonly_fields = ('tarea', 'inicio', 'fin', 'estado', 'resultado', 'error')
+    readonly_fields = ('tarea', 'host', 'inicio', 'fin', 'estado', 'resultado', 'error')
     actions = ['borrar_seleccion_async']
 
     def duracion(self, obj):

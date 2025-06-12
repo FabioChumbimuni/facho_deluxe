@@ -5,7 +5,7 @@ from celery import shared_task
 from django.utils import timezone
 from django.db import close_old_connections, transaction, connections
 from easysnmp import Session, EasySNMPError, EasySNMPTimeoutError
-from ..models import OnuDato, TareaSNMP, EjecucionTareaSNMP
+from ..models import OnuDato, TareaSNMP, EjecucionTareaSNMP, Host
 from .common import logger
 
 TIPO_A_CAMPO = {
@@ -28,7 +28,7 @@ TIPO_A_CAMPO = {
     max_retries=2,
     soft_time_limit=120  # 2 minutos por lote
 )
-def poller_worker(self, tarea_id, ejecucion_id, indices):
+def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
     """
     Procesa un conjunto de índices SNMP para una tarea específica.
     
@@ -36,13 +36,25 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         tarea_id: ID de la TareaSNMP
         ejecucion_id: ID de la EjecucionTareaSNMP
         indices: Lista de índices SNMP a consultar
+        host_id: ID del Host a consultar
     """
     close_old_connections()
 
     try:
-        # 1. Cargar tarea y ejecución
+        # 1. Cargar tarea, ejecución y host
         tarea = TareaSNMP.objects.get(pk=tarea_id)
         ejec = EjecucionTareaSNMP.objects.get(pk=ejecucion_id)
+        host = Host.objects.get(pk=host_id)
+
+        # Validar que el host pertenece a la tarea
+        if not tarea.hosts.filter(pk=host_id).exists():
+            error_msg = f"Host {host_id} no pertenece a la tarea {tarea_id}"
+            logger.error(error_msg)
+            ejec.error = error_msg
+            ejec.estado = 'F'
+            ejec.fin = timezone.now()
+            ejec.save()
+            return {'updated': 0, 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
 
         # Validaciones críticas PRIMERO
         if not tarea.get_oid():
@@ -54,9 +66,9 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             ejec.save()
             return {'updated': 0, 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
             
-        campo = TIPO_A_CAMPO.get(tarea.tipo)
+        campo = TIPO_A_CAMPO.get(tarea.trabajo.tipo)
         if not campo:
-            error_msg = f"Tipo {tarea.tipo} no tiene campo destino definido"
+            error_msg = f"Tipo {tarea.trabajo.tipo} no tiene campo destino definido"
             logger.error(error_msg)
             ejec.error = error_msg
             ejec.estado = 'F'
@@ -68,12 +80,12 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         logger.debug(f"[DEBUG] OID: {tarea.get_oid()}, Campo: {campo}")
         
         # Configuración SNMP con timeout ajustado según tipo
-        timeout = 10 if tarea.tipo == 'modelo_onu' else 6  # Mayor timeout para modelo_onu
-        retries = 2 if tarea.tipo == 'modelo_onu' else 1   # Más reintentos para modelo_onu
+        timeout = 10 if tarea.trabajo.tipo == 'modelo_onu' else 6  # Mayor timeout para modelo_onu
+        retries = 2 if tarea.trabajo.tipo == 'modelo_onu' else 1   # Más reintentos para modelo_onu
         
         session = Session(
-            hostname=tarea.host_ip,
-            community=tarea.comunidad,
+            hostname=host.ip,
+            community=host.comunidad,
             version=2,
             timeout=timeout,
             retries=retries
@@ -81,7 +93,7 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
 
         # Mapeo de índices
         recs = OnuDato.objects.filter(
-            host=tarea.host_name,
+            host=host.nombre,
             snmpindexonu__in=indices
         ).values('id', 'snmpindexonu')
         
@@ -95,7 +107,7 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
         try:
             vars = session.get(oid_list)
         except EasySNMPTimeoutError as e:
-            error_msg = f"Timeout SNMP en {tarea.host_ip}: {str(e)}"
+            error_msg = f"Timeout SNMP en {host.ip}: {str(e)}"
             logger.error(error_msg)
             ejec.error = error_msg
             ejec.estado = 'F'
@@ -104,7 +116,7 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
             raise  # Permitir reintento para todos los tipos
             
         except EasySNMPError as e:
-            error_msg = f"Error SNMP en {tarea.host_ip}: {str(e)}"
+            error_msg = f"Error SNMP en {host.ip}: {str(e)}"
             logger.error(error_msg)
             ejec.error = error_msg
             ejec.estado = 'F'
@@ -193,73 +205,44 @@ def poller_worker(self, tarea_id, ejecucion_id, indices):
 
             # Validación y actualización para otros tipos
             if not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
-                if tarea.tipo == 'modelo_onu':
+                if tarea.trabajo.tipo == 'modelo_onu':
                     # Para modelo_onu, verificar si ya tiene un valor
                     try:
                         onu_actual = OnuDato.objects.get(id=onu_id)
                         valor_actual = getattr(onu_actual, campo)
-                        
-                        if val == "" and valor_actual and valor_actual != "No identificado":
-                            # Si la consulta devuelve vacío y ya tiene un valor, mantener el valor actual
-                            updated += 1
-                            logger.debug(f"Manteniendo valor actual '{valor_actual}' para {onu_id}")
-                            continue
-                        elif not valor_actual:
-                            # Si no tiene valor, marcar como No identificado
+                        if not valor_actual:
+                            # Si no tiene valor, marcar como No Modelo
                             with transaction.atomic():
-                                OnuDato.objects.filter(id=onu_id).update(
-                                    **{campo: "No identificado"}
-                                )
+                                OnuDato.objects.filter(id=onu_id).update(**{campo: "No Modelo"})
                                 updated += 1
-                                logger.debug(f"Marcado como No identificado (sin valor previo): {onu_id}")
+                                logger.debug(f"[MODELO] Actualizado a No Modelo para {onu_id}")
                     except Exception as e:
-                        errors.append(f"Error verificando valor actual de {onu_id}: {str(e)}")
-                else:
-                    # Para otros tipos, mantener el comportamiento de borrado
-                    to_delete.append(onu_id)
-                    deleted += 1
-                    logger.debug(f"Borrando {onu_id} (valor inválido)")
-            else:
-                # Solo actualizar si no es campo de distancia (ya que se maneja arriba)
-                if campo != 'distancia_m':
-                    try:
-                        with transaction.atomic():
-                            OnuDato.objects.filter(id=onu_id).update(
-                                **{campo: val}
-                            )
-                            updated += 1
-                            logger.debug(f"Actualizado {campo}={val} ({onu_id})")
-                    except Exception as e:
-                        error_msg = f"Error BD: {str(e)}"
-                        errors.append(error_msg)
-                        logger.error(f"Fallo actualizando {onu_id}: {str(e)}")
+                        logger.error(f"Error procesando modelo para {onu_id}: {str(e)}")
+                        errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                continue
 
-        # Ejecutar borrados solo si no es modelo_onu
-        if to_delete and tarea.tipo != 'modelo_onu':
-            OnuDato.objects.filter(id__in=to_delete).delete()
-            logger.info(f"Eliminados {len(to_delete)} registros")
+            # Actualización normal para otros tipos
+            try:
+                with transaction.atomic():
+                    OnuDato.objects.filter(id=onu_id).update(**{campo: val})
+                    updated += 1
+                    logger.debug(f"[NORMAL] Actualizado {campo}={val} ({onu_id})")
+            except Exception as e:
+                logger.error(f"Error actualizando {campo} para {onu_id}: {str(e)}")
+                errors.append(f"Error en ONU {onu_id}: {str(e)}")
 
-        logger.info(f"Ejecución {ejecucion_id}: {updated} act, {deleted} borr, {len(errors)} err")
-
-        # Actualizar estado de ejecución
-        ejec.fin = timezone.now()
-        ejec.estado = 'C' if not errors else 'F'
-        ejec.error = '\n'.join(errors) if errors else None
-        ejec.resultado = {
+        return {
             'updated': updated,
             'deleted': deleted,
             'errors': errors,
-            'to_delete': to_delete,
+            'to_delete': to_delete
         }
-        ejec.save()
 
-    finally:
-        for conn in connections.all():
-            conn.close()
-
-    return {
-        'updated': updated,
-        'deleted': deleted,
-        'errors': errors,
-        'to_delete': to_delete,
-    }
+    except Exception as e:
+        logger.error(f"Error general en poller_worker: {str(e)}", exc_info=True)
+        return {
+            'updated': 0,
+            'deleted': 0,
+            'errors': [str(e)],
+            'to_delete': []
+        }

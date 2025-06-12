@@ -2,7 +2,7 @@ import logging
 from celery import shared_task, chord
 from django.utils import timezone
 from django.db import close_old_connections
-from ..models import TareaSNMP, OnuDato, EjecucionTareaSNMP
+from ..models import TareaSNMP, OnuDato, EjecucionTareaSNMP, Host
 from .poller_worker import poller_worker
 from .poller_aggregator import poller_aggregator
 
@@ -20,7 +20,7 @@ TIPOS_PERMITIDOS = [
     name='snmp_scheduler.tasks.ejecutar_bulk_wrapper',
     queue='principal'
 )
-def ejecutar_bulk_wrapper(self, tarea_id=None):
+def ejecutar_bulk_wrapper(self, tarea_id=None, host_id=None):
     """
     Procesa solo tareas con tipos válidos (TIPOS_PERMITIDOS).
     Para ejecución manual (tarea_id especificado) no requiere que la tarea esté activa.
@@ -35,34 +35,51 @@ def ejecutar_bulk_wrapper(self, tarea_id=None):
             # Para ejecución manual solo validamos que exista y tenga tipo válido
             tarea = TareaSNMP.objects.get(
                 pk=tarea_id,
-                tipo__in=TIPOS_PERMITIDOS  # Solo validamos tipo válido
+                trabajo__tipo__in=TIPOS_PERMITIDOS  # Solo validamos tipo válido
             )
-            tareas = [tarea]
-        except TareaSNMP.DoesNotExist:
-            logger.warning(f"[master] Tarea {tarea_id} no existe o tiene tipo inválido.")
+            
+            # Si se especifica host_id, verificar que pertenece a la tarea
+            if host_id:
+                host = Host.objects.get(pk=host_id)
+                if not tarea.hosts.filter(pk=host_id).exists():
+                    logger.warning(f"[master] Host {host_id} no pertenece a la tarea {tarea_id}")
+                    return
+            else:
+                # Si no se especifica host_id, procesar todos los hosts de la tarea
+                for host in tarea.hosts.all():
+                    ejecutar_bulk_wrapper.delay(tarea_id, host.id)
+                return
+                
+            tareas = [(tarea, host)]
+        except (TareaSNMP.DoesNotExist, Host.DoesNotExist):
+            logger.warning(f"[master] Tarea {tarea_id} o host {host_id} no existe o tiene tipo inválido.")
             return
     else:
         # Para ejecución automática sí requerimos que esté activa
         minuto = ahora.minute
-        tareas = list(
-            TareaSNMP.objects
-                     .filter(activa=True, intervalo=f"{minuto:02d}", tipo__in=TIPOS_PERMITIDOS)
-                     .order_by('modo')
-        )
+        tareas = []
+        for tarea in TareaSNMP.objects.filter(
+            activa=True,
+            trabajo__intervalo=f"{minuto:02d}",
+            trabajo__tipo__in=TIPOS_PERMITIDOS
+        ).order_by('trabajo__modo'):
+            for host in tarea.hosts.all():
+                tareas.append((tarea, host))
 
     # 2) Procesar cada tarea
-    for tarea in tareas:
-        logger.info(f"[master] Ejecutando tarea {tarea.id} ({tarea.tipo})")
+    for tarea, host in tareas:
+        logger.info(f"[master] Ejecutando tarea {tarea.id} ({tarea.trabajo.tipo}) para host {host.nombre}")
         ejec = EjecucionTareaSNMP.objects.create(
             tarea=tarea,
             inicio=ahora,
-            estado='E'
+            estado='E',
+            host=host
         )
 
         # 3) Obtener índices existentes para ese host
         onus = list(
             OnuDato.objects
-                   .filter(host=tarea.host_name)
+                   .filter(host=host.nombre)
                    .values_list('snmpindexonu', flat=True)
         )
         if not onus:
@@ -76,8 +93,8 @@ def ejecutar_bulk_wrapper(self, tarea_id=None):
         chunk_size = getattr(tarea, 'chunk_size', 200) or 200
         chunks = [onus[i:i + chunk_size] for i in range(0, len(onus), chunk_size)]
         
-        header = [poller_worker.s(tarea.id, ejec.id, chunk) for chunk in chunks]
-        callback = poller_aggregator.s(tarea.id, ejec.id)
+        header = [poller_worker.s(tarea.id, ejec.id, chunk, host.id) for chunk in chunks]
+        callback = poller_aggregator.s(tarea.id, ejec.id, host.id)
         chord(header)(callback)
 
     close_old_connections()

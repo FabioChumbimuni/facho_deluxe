@@ -90,7 +90,7 @@ class TareaSNMP(models.Model):
     }
 
     nombre = models.CharField(max_length=100, verbose_name='Nombre de la Tarea')
-    host = models.ForeignKey(Host, on_delete=models.CASCADE, verbose_name='Host')
+    hosts = models.ManyToManyField(Host, verbose_name='Hosts')
     trabajo = models.ForeignKey(
         TrabajoSNMP,
         on_delete=models.PROTECT,
@@ -114,19 +114,22 @@ class TareaSNMP(models.Model):
         ordering = ['nombre']
 
     def __str__(self):
-        return f"{self.nombre} - {self.host.nombre}"
+        hosts_str = ", ".join([h.nombre for h in self.hosts.all()[:3]])
+        if self.hosts.count() > 3:
+            hosts_str += f" y {self.hosts.count() - 3} más"
+        return f"{self.nombre} - [{hosts_str}]"
 
     @property
-    def host_name(self):
-        return self.host.nombre
+    def host_names(self):
+        return [host.nombre for host in self.hosts.all()]
 
     @property
-    def host_ip(self):
-        return self.host.ip
+    def host_ips(self):
+        return [host.ip for host in self.hosts.all()]
 
     @property
-    def comunidad(self):
-        return self.host.comunidad
+    def comunidades(self):
+        return [host.comunidad for host in self.hosts.all()]
 
     @property
     def tipo(self):
@@ -202,6 +205,7 @@ class EjecucionTareaSNMP(models.Model):
     )
 
     tarea      = models.ForeignKey(TareaSNMP, on_delete=models.CASCADE, related_name='ejecuciones')
+    host       = models.ForeignKey(Host, on_delete=models.CASCADE, verbose_name='Host', null=True, blank=True)
     inicio     = models.DateTimeField(auto_now_add=True)
     fin        = models.DateTimeField(null=True, blank=True)
     estado     = models.CharField(max_length=1, choices=ESTADOS, default='P')
@@ -214,4 +218,5 @@ class EjecucionTareaSNMP(models.Model):
         verbose_name_plural = "Ejecuciones de Tareas"
 
     def __str__(self):
-        return f"{self.tarea.nombre} - {self.get_estado_display()} ({self.inicio:%Y-%m-%d %H:%M:%S})"
+        host_str = f" - {self.host.nombre}" if self.host else ""
+        return f"{self.tarea.nombre}{host_str} - {self.get_estado_display()} ({self.inicio:%Y-%m-%d %H:%M:%S})"

@@ -4,7 +4,7 @@ from celery import shared_task
 from easysnmp import Session, EasySNMPError
 from django.db import connection
 from django.utils import timezone
-from ..models import TareaSNMP, EjecucionTareaSNMP
+from ..models import TareaSNMP, EjecucionTareaSNMP, Host
 from .common import logger
 
 @shared_task(
@@ -15,15 +15,22 @@ from .common import logger
     retry_backoff=30,
     queue='secundario'
 )
-def ejecutar_descubrimiento(self, tarea_id):
+def ejecutar_descubrimiento(self, tarea_id, host_id):
     ejecucion = None
     try:
-        # 1) Cargar tarea y crear registro de ejecución
+        # 1) Cargar tarea, host y crear registro de ejecución
         tarea = TareaSNMP.objects.get(pk=tarea_id)
+        host = Host.objects.get(pk=host_id)
+        
+        # Verificar que el host pertenece a la tarea
+        if not tarea.hosts.filter(pk=host_id).exists():
+            raise Exception(f"El host {host_id} no está asociado a la tarea {tarea_id}")
+            
         ejecucion = EjecucionTareaSNMP.objects.create(
             tarea=tarea,
             estado='E',
-            inicio=timezone.now()
+            inicio=timezone.now(),
+            host=host  # Agregamos el host específico a la ejecución
         )
 
         # 2) Actualizar última ejecución en la tarea
@@ -32,8 +39,8 @@ def ejecutar_descubrimiento(self, tarea_id):
 
         # 3) Preparar sesión EasySNMP y obtener el OID base de la tarea
         session = Session(
-            hostname=tarea.host_ip,
-            community=tarea.comunidad,
+            hostname=host.ip,
+            community=host.comunidad,
             version=2,
             timeout=6,
             retries=1
@@ -66,16 +73,16 @@ def ejecutar_descubrimiento(self, tarea_id):
                     VALUES (%s, %s, %s)
                     ON CONFLICT (snmpindexonu, host)
                     DO UPDATE SET act_susp = EXCLUDED.act_susp
-                """, [snmpindexonu, act_susp, tarea.host_name])
+                """, [snmpindexonu, act_susp, host.nombre])
 
         # 6) Marcar ejecución como completa
         ejecucion.estado = 'C'
         ejecucion.fin = timezone.now()
         ejecucion.save()
-        return {"status": "success"}
+        return {"status": "success", "host": host.nombre}
 
     except Exception as e:
-        logger.error(f"[descubrimiento] ERROR en tarea={tarea_id}: {e}", exc_info=True)
+        logger.error(f"[descubrimiento] ERROR en tarea={tarea_id}, host={host_id}: {e}", exc_info=True)
         if ejecucion:
             ejecucion.estado = 'F'
             ejecucion.fin = timezone.now()

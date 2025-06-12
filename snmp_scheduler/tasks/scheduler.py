@@ -1,7 +1,7 @@
 # snmp_scheduler/tasks/scheduler.py
 
 import logging
-from celery import shared_task, chord
+from celery import shared_task, chord, group
 from django.utils import timezone
 from datetime import timedelta, datetime
 from django.db.models import Q
@@ -87,20 +87,20 @@ def get_intervals_to_execute(time):
     return [current]  # Solo ejecutar el intervalo actual
 
 @shared_task(name="snmp_scheduler.tasks._execute_bulk_and_next")
-def _execute_bulk_and_next(header_results, bulk_ids, modo_actual, modos_restantes):
+def _execute_bulk_and_next(header_results, bulk_ids_with_hosts, modo_actual, modos_restantes):
     """
     Callback tras completar todos los 'descubrimiento' de la fase current:
     - header_results: lista de resultados del discovery (ignoramos aquí)
-    - bulk_ids: lista de IDs de tareas datos_bulk para encolar ahora
+    - bulk_ids_with_hosts: lista de tuplas (tarea_id, host_id) para bulk
     - modo_actual: nombre de la fase actual ('principal','modo','secundario')
     - modos_restantes: lista de las fases que faltan tras ésta
     """
     logger.info(f"[scheduler] Ejecutando bulk y siguiente fase. Modo actual: {modo_actual}, Modos restantes: {modos_restantes}")
     
     # 1) Encolar todos los datos_bulk de esta fase
-    for tarea_id in bulk_ids:
-        ejecutar_bulk_wrapper.delay(tarea_id)
-        logger.info(f"[scheduler] Encolado tarea bulk#{tarea_id} ({modo_actual})")
+    for tarea_id, host_id in bulk_ids_with_hosts:
+        ejecutar_bulk_wrapper.delay(tarea_id, host_id)
+        logger.info(f"[scheduler] Encolado tarea bulk#{tarea_id} para host#{host_id} ({modo_actual})")
 
     # 2) Lanzar inmediatamente la siguiente fase, si la hay
     if modos_restantes:
@@ -132,24 +132,32 @@ def _start_fase(header_results, modo_actual, modos_restantes):
         activa=True,
         trabajo__modo=modo_actual,
         trabajo__intervalo=intervalo  # Buscar sin paréntesis
-    )
+    ).prefetch_related('hosts')
     
     logger.info(f"[scheduler] Encontradas {len(tareas_a_ejecutar)} tareas para modo {modo_actual} en intervalo {intervalo}")
     
-    desc_ids = [t.pk for t in tareas_a_ejecutar if t.trabajo.tipo == "descubrimiento"]
-    bulk_ids = [t.pk for t in tareas_a_ejecutar if t.trabajo.tipo in TIPOS_BULK]
+    # Crear lista de tuplas (tarea_id, host_id) para discovery y bulk
+    desc_ids_with_hosts = []
+    bulk_ids_with_hosts = []
+    
+    for tarea in tareas_a_ejecutar:
+        for host in tarea.hosts.all():
+            if tarea.trabajo.tipo == "descubrimiento":
+                desc_ids_with_hosts.append((tarea.pk, host.pk))
+            elif tarea.trabajo.tipo in TIPOS_BULK:
+                bulk_ids_with_hosts.append((tarea.pk, host.pk))
 
-    logger.info(f"[scheduler] Fase '{modo_actual}': {len(desc_ids)} discovery, {len(bulk_ids)} bulk")
+    logger.info(f"[scheduler] Fase '{modo_actual}': {len(desc_ids_with_hosts)} discovery, {len(bulk_ids_with_hosts)} bulk")
     logger.info(f"[scheduler] Tareas a ejecutar en modo {modo_actual}: {[t.nombre for t in tareas_a_ejecutar]}")
 
     # Si no hay descubrimiento, saltamos a bulk y luego a la siguiente fase
-    if not desc_ids:
+    if not desc_ids_with_hosts:
         logger.info(f"[scheduler] No hay tareas discovery en fase {modo_actual}, pasando a bulk y siguientes fases")
-        return _execute_bulk_and_next.delay([], bulk_ids, modo_actual, modos_restantes)
+        return _execute_bulk_and_next.delay([], bulk_ids_with_hosts, modo_actual, modos_restantes)
 
     # Si hay discovery, los ejecutamos en chord, luego bulk y siguiente fase
-    header = [ejecutar_descubrimiento.s(tid) for tid in desc_ids]
-    callback = _execute_bulk_and_next.s(bulk_ids, modo_actual, modos_restantes)
+    header = [ejecutar_descubrimiento.s(tid, hid) for tid, hid in desc_ids_with_hosts]
+    callback = _execute_bulk_and_next.s(bulk_ids_with_hosts, modo_actual, modos_restantes)
     chord(header)(callback)
     logger.info(f"[scheduler] Chord discovery fase='{modo_actual}' lanzado")
 
