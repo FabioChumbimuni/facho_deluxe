@@ -7,6 +7,7 @@ from django.db import close_old_connections, transaction, connections
 from easysnmp import Session, EasySNMPError, EasySNMPTimeoutError
 from ..models import OnuDato, TareaSNMP, EjecucionTareaSNMP, Host
 from .common import logger
+import time
 
 TIPO_A_CAMPO = {
     'descubrimiento': 'act_susp',
@@ -104,174 +105,225 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
         base_oid = tarea.get_oid()
         oid_list = [f"{base_oid}.{idx}" for idx in indices]
         
-        try:
-            vars = session.get(oid_list)
-        except EasySNMPTimeoutError as e:
-            error_msg = f"Timeout SNMP en {host.ip}: {str(e)}"
-            logger.error(error_msg)
-            ejec.error = error_msg
-            ejec.estado = 'F'
-            ejec.fin = timezone.now()
-            ejec.save()
-            raise  # Permitir reintento para todos los tipos
-            
-        except EasySNMPError as e:
-            error_msg = f"Error SNMP en {host.ip}: {str(e)}"
-            logger.error(error_msg)
-            ejec.error = error_msg
-            ejec.estado = 'F'
-            ejec.fin = timezone.now()
-            ejec.save()
-            return {'updated': 0, 'deleted': 0, 'errors': [error_msg], 'to_delete': []}
-
         updated = deleted = 0
         errors = []
         to_delete = []
+        timeout_indices = []
+        max_retries = 2  # Máximo número de reintentos por índice
+        retry_delay = 2  # Segundos entre reintentos
 
-        # Procesar respuestas
-        for var in vars:
-            parts = var.oid.split('.')
-            if len(parts) < 2:
-                errors.append(f"OID inválido: {var.oid}")
-                continue
-                
-            idx = f"{parts[-2]}.{parts[-1]}"
+        def procesar_lote(indices_lote, es_reintento=False):
+            nonlocal updated, deleted, errors, timeout_indices
+            oid_list_lote = [f"{base_oid}.{idx}" for idx in indices_lote]
             
-            if idx not in idx_to_id:
-                errors.append(f"Índice {idx} no existe en BD")
-                continue
-
-            onu_id = idx_to_id[idx]
-            val = (var.value or "").strip().strip('"')
-            
-            # Verificar si es un error de "No Such Instance" o similar
-            if (val.lower() in ["no such instance currently exists at this oid", 
-                              "no such instance", 
-                              "nosuchinstance", 
-                              "nosuchobject"] or 
-                "no such" in val.lower()):
-                try:
-                    with transaction.atomic():
-                        OnuDato.objects.filter(id=onu_id).delete()
-                        deleted += 1
-                        logger.debug(f"[DELETE] Eliminada ONU {onu_id} por No Such Instance. Valor recibido: '{val}'")
+            try:
+                vars = session.get(oid_list_lote)
+                for var in vars:
+                    parts = var.oid.split('.')
+                    if len(parts) < 2:
+                        errors.append(f"OID inválido: {var.oid}")
                         continue
-                except Exception as e:
-                    logger.error(f"Error eliminando ONU {onu_id}: {str(e)}")
-                    errors.append(f"Error eliminando ONU {onu_id}: {str(e)}")
-                    continue
-
-            # Procesamiento específico por tipo de campo
-            if campo == 'distancia_m':
-                try:
-                    # Limpiar el valor recibido
-                    val = val.strip() if val else ""
-
-                    # Obtener el valor actual
-                    onu_actual = OnuDato.objects.get(id=onu_id)
-                    valor_actual = getattr(onu_actual, campo)
-
-                    # Si el valor es -1
-                    if val == "-1":
-                        if not valor_actual:
-                            # Si no hay valor actual, poner No Distancia
-                            with transaction.atomic():
-                                OnuDato.objects.filter(id=onu_id).update(**{campo: "No Distancia"})
-                                updated += 1
-                                logger.debug(f"[DISTANCIA] Actualizado a No Distancia para {onu_id} (valor inicial)")
-                        else:
-                            # Si hay valor actual, mantenerlo
-                            logger.debug(f"[DISTANCIA] Valor -1 recibido, manteniendo valor actual '{valor_actual}' para {onu_id}")
-                        continue
-
-                    # Si el valor no es -1
-                    try:
-                        # Verificar si ya tiene formato de kilómetros
-                        if '.' in val:
-                            nuevo_valor = f"{val} km"
-                        else:
-                            # Si es un valor en metros, convertir a kilómetros
-                            metros = float(val)
-                            km = metros / 1000
-                            nuevo_valor = f"{km:.3f} km"
-
-                        # Solo actualizar si el valor actual es "No Distancia" o no existe
-                        if not valor_actual or valor_actual == "No Distancia":
-                            with transaction.atomic():
-                                OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
-                                updated += 1
-                                logger.debug(f"[DISTANCIA] Actualizado a {nuevo_valor} para {onu_id}")
-                        else:
-                            logger.debug(f"[DISTANCIA] Manteniendo valor actual '{valor_actual}' para {onu_id}")
-
-                    except ValueError:
-                        logger.error(f"Error procesando distancia para {onu_id}: valor={val}")
-                        errors.append(f"Error procesando distancia para ONU {onu_id}")
-
-                except Exception as e:
-                    logger.error(f"Error procesando distancia para {onu_id}: {str(e)}")
-                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
-                    continue
-
-            elif campo == 'plan_onu':
-                try:
-                    onu_actual = OnuDato.objects.get(id=onu_id)
-                    valor_actual = getattr(onu_actual, campo)
-                    logger.info(f"[PLAN_ONU] Procesando ONU {onu_id} - Valor actual: '{valor_actual}', Valor nuevo: '{val}'")
+                        
+                    idx = f"{parts[-2]}.{parts[-1]}"
                     
-                    if val and val.lower() not in ('no such', 'nosuchinstance', 'nosuchobject'):
-                        # Si hay un valor nuevo válido, actualizarlo
-                        with transaction.atomic():
-                            OnuDato.objects.filter(id=onu_id).update(**{campo: val})
-                            updated += 1
-                            logger.debug(f"[PLAN_ONU] Actualizado plan_onu={val} ({onu_id})")
-                    elif valor_actual:
-                        # Si no hay valor nuevo pero hay valor actual, mantener el actual
-                        updated += 1
-                        logger.debug(f"[PLAN_ONU] Manteniendo plan actual '{valor_actual}' para {onu_id}")
+                    if idx not in idx_to_id:
+                        errors.append(f"Índice {idx} no existe en BD")
+                        continue
+
+                    onu_id = idx_to_id[idx]
+                    val = (var.value or "").strip().strip('"')
+                    
+                    # Verificar si es un error de "No Such Instance" o similar
+                    if (val.lower() in ["no such instance currently exists at this oid", 
+                                      "no such instance", 
+                                      "nosuchinstance", 
+                                      "nosuchobject"] or 
+                        "no such" in val.lower()):
+                        try:
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).delete()
+                                deleted += 1
+                                logger.debug(f"[DELETE] Eliminada ONU {onu_id} por No Such Instance. Valor recibido: '{val}'")
+                                continue
+                        except Exception as e:
+                            logger.error(f"Error eliminando ONU {onu_id}: {str(e)}")
+                            errors.append(f"Error eliminando ONU {onu_id}: {str(e)}")
+                            continue
+
+                    # Procesamiento específico por tipo de campo
+                    if campo == 'distancia_m':
+                        try:
+                            # Limpiar el valor recibido
+                            val = val.strip() if val else ""
+
+                            # Obtener el valor actual
+                            onu_actual = OnuDato.objects.get(id=onu_id)
+                            valor_actual = getattr(onu_actual, campo)
+
+                            # Si el valor es -1
+                            if val == "-1":
+                                if not valor_actual:
+                                    # Si no hay valor actual, poner No Distancia
+                                    with transaction.atomic():
+                                        OnuDato.objects.filter(id=onu_id).update(**{campo: "No Distancia"})
+                                        updated += 1
+                                        logger.debug(f"[DISTANCIA] Actualizado a No Distancia para {onu_id} (valor inicial)")
+                                else:
+                                    # Si hay valor actual, mantenerlo
+                                    logger.debug(f"[DISTANCIA] Valor -1 recibido, manteniendo valor actual '{valor_actual}' para {onu_id}")
+                                continue
+
+                            # Si el valor no es -1
+                            try:
+                                # Verificar si ya tiene formato de kilómetros
+                                if '.' in val:
+                                    nuevo_valor = f"{val} km"
+                                else:
+                                    # Si es un valor en metros, convertir a kilómetros
+                                    metros = float(val)
+                                    km = metros / 1000
+                                    nuevo_valor = f"{km:.3f} km"
+
+                                # Solo actualizar si el valor actual es "No Distancia" o no existe
+                                if not valor_actual or valor_actual == "No Distancia":
+                                    with transaction.atomic():
+                                        OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
+                                        updated += 1
+                                        logger.debug(f"[DISTANCIA] Actualizado a {nuevo_valor} para {onu_id}")
+                                else:
+                                    logger.debug(f"[DISTANCIA] Manteniendo valor actual '{valor_actual}' para {onu_id}")
+
+                            except ValueError:
+                                logger.error(f"Error procesando distancia para {onu_id}: valor={val}")
+                                errors.append(f"Error procesando distancia para ONU {onu_id}")
+
+                        except Exception as e:
+                            logger.error(f"Error procesando distancia para {onu_id}: {str(e)}")
+                            errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                            continue
+
+                    elif campo == 'plan_onu':
+                        try:
+                            onu_actual = OnuDato.objects.get(id=onu_id)
+                            valor_actual = getattr(onu_actual, campo)
+                            logger.info(f"[PLAN_ONU] Procesando ONU {onu_id} - Valor actual: '{valor_actual}', Valor nuevo: '{val}'")
+                            
+                            if val and val.lower() not in ('no such', 'nosuchinstance', 'nosuchobject'):
+                                # Si hay un valor nuevo válido, actualizarlo
+                                with transaction.atomic():
+                                    OnuDato.objects.filter(id=onu_id).update(**{campo: val})
+                                    updated += 1
+                                    logger.debug(f"[PLAN_ONU] Actualizado plan_onu={val} ({onu_id})")
+                            elif valor_actual:
+                                # Si no hay valor nuevo pero hay valor actual, mantener el actual
+                                updated += 1
+                                logger.debug(f"[PLAN_ONU] Manteniendo plan actual '{valor_actual}' para {onu_id}")
+                            else:
+                                # Si no hay valor actual ni nuevo, poner No Plan
+                                nuevo_valor = "No Plan"
+                                with transaction.atomic():
+                                    OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
+                                    updated += 1
+                                    logger.debug(f"[PLAN_ONU] Actualizado plan_onu={nuevo_valor} (no había valor) ({onu_id})")
+                        except Exception as e:
+                            logger.error(f"Error procesando plan_onu para {onu_id}: {str(e)}")
+                            errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                            continue
+
+                    elif tarea.trabajo.tipo == 'modelo_onu' and (not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT')):
+                        try:
+                            onu_actual = OnuDato.objects.get(id=onu_id)
+                            valor_actual = getattr(onu_actual, campo)
+                            if not valor_actual:
+                                # Si no tiene valor, marcar como No Modelo
+                                with transaction.atomic():
+                                    OnuDato.objects.filter(id=onu_id).update(**{campo: "No Modelo"})
+                                    updated += 1
+                                    logger.debug(f"[MODELO] Actualizado a No Modelo para {onu_id}")
+                        except Exception as e:
+                            logger.error(f"Error procesando modelo para {onu_id}: {str(e)}")
+                            errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                            continue
+
+                    # Actualización normal para otros tipos
+                    elif val and 'no such' not in val.lower() and val.upper() not in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
+                        try:
+                            with transaction.atomic():
+                                OnuDato.objects.filter(id=onu_id).update(**{campo: val})
+                                updated += 1
+                                logger.debug(f"[NORMAL] Actualizado {campo}={val} ({onu_id})")
+                        except Exception as e:
+                            logger.error(f"Error actualizando {campo} para {onu_id}: {str(e)}")
+                            errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                return True
+            except EasySNMPTimeoutError as e:
+                error_msg = f"Timeout SNMP en {host.ip}: {str(e)}"
+                logger.error(error_msg)
+                if not es_reintento:
+                    logger.info(f"Timeout en lote de {len(indices_lote)} índices")
+                return False
+            except EasySNMPError as e:
+                error_msg = f"Error SNMP en {host.ip}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+                return False
+
+        # Si es un lote grande (200), intentamos procesarlo en subgrupos
+        if len(indices) >= 200:
+            logger.info(f"[PROTOCOLO] Iniciando procesamiento de lote grande ({len(indices)} índices)")
+            # Primero intentamos con el lote completo
+            if not procesar_lote(indices):
+                logger.info("[PROTOCOLO] Timeout en lote completo, iniciando protocolo de subgrupos")
+                # Si falla, dividimos en subgrupos de 50
+                subgrupos = [indices[i:i + 50] for i in range(0, len(indices), 50)]
+                logger.info(f"[PROTOCOLO] Dividido en {len(subgrupos)} subgrupos de 50 índices")
+                
+                for i, subgrupo in enumerate(subgrupos, 1):
+                    logger.info(f"[PROTOCOLO] Procesando subgrupo {i}/{len(subgrupos)} ({len(subgrupo)} índices)")
+                    if not procesar_lote(subgrupo):
+                        logger.info(f"[PROTOCOLO] Timeout en subgrupo {i}, iniciando procesamiento individual")
+                        # Si falla el subgrupo, intentamos uno por uno con reintentos
+                        for idx in subgrupo:
+                            retry_count = 0
+                            while retry_count < max_retries:
+                                try:
+                                    if procesar_lote([idx], es_reintento=(retry_count > 0)):
+                                        logger.debug(f"[PROTOCOLO] Índice {idx} procesado exitosamente")
+                                        break
+                                    else:
+                                        retry_count += 1
+                                        if retry_count < max_retries:
+                                            logger.info(f"[PROTOCOLO] Reintentando índice {idx} (intento {retry_count + 1}/{max_retries})")
+                                            time.sleep(retry_delay)
+                                        else:
+                                            timeout_indices.append(idx)
+                                            logger.error(f"[PROTOCOLO] Timeout en índice {idx} después de {max_retries} intentos")
+                                except Exception as e:
+                                    logger.error(f"[PROTOCOLO] Error procesando índice {idx}: {str(e)}")
+                                    errors.append(f"Error en índice {idx}: {str(e)}")
+                                    break
                     else:
-                        # Si no hay valor actual ni nuevo, poner No Plan
-                        nuevo_valor = "No Plan"
-                        with transaction.atomic():
-                            OnuDato.objects.filter(id=onu_id).update(**{campo: nuevo_valor})
-                            updated += 1
-                            logger.debug(f"[PLAN_ONU] Actualizado plan_onu={nuevo_valor} (no había valor) ({onu_id})")
-                except Exception as e:
-                    logger.error(f"Error procesando plan_onu para {onu_id}: {str(e)}")
-                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
-                    continue
+                        logger.info(f"[PROTOCOLO] Subgrupo {i} procesado exitosamente")
+        else:
+            # Para lotes pequeños, procesamos normalmente
+            logger.info(f"[PROTOCOLO] Procesando lote pequeño ({len(indices)} índices)")
+            procesar_lote(indices)
 
-            elif tarea.trabajo.tipo == 'modelo_onu' and (not val or 'no such' in val.lower() or val.upper() in ('NOSUCHINSTANCE', 'NOSUCHOBJECT')):
-                try:
-                    onu_actual = OnuDato.objects.get(id=onu_id)
-                    valor_actual = getattr(onu_actual, campo)
-                    if not valor_actual:
-                        # Si no tiene valor, marcar como No Modelo
-                        with transaction.atomic():
-                            OnuDato.objects.filter(id=onu_id).update(**{campo: "No Modelo"})
-                            updated += 1
-                            logger.debug(f"[MODELO] Actualizado a No Modelo para {onu_id}")
-                except Exception as e:
-                    logger.error(f"Error procesando modelo para {onu_id}: {str(e)}")
-                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
-                    continue
-
-            # Actualización normal para otros tipos
-            elif val and 'no such' not in val.lower() and val.upper() not in ('NOSUCHINSTANCE', 'NOSUCHOBJECT'):
-                try:
-                    with transaction.atomic():
-                        OnuDato.objects.filter(id=onu_id).update(**{campo: val})
-                        updated += 1
-                        logger.debug(f"[NORMAL] Actualizado {campo}={val} ({onu_id})")
-                except Exception as e:
-                    logger.error(f"Error actualizando {campo} para {onu_id}: {str(e)}")
-                    errors.append(f"Error en ONU {onu_id}: {str(e)}")
+        # Actualizar estado de ejecución
+        if errors or timeout_indices:
+            if timeout_indices:
+                errors.append(f"[PROTOCOLO] Timeout en índices después de {max_retries} intentos: {', '.join(timeout_indices)}")
+            ejec.error = "\n".join(errors)
+            ejec.estado = 'P'  # Parcial en lugar de F (Fallido)
+            ejec.fin = timezone.now()
+            ejec.save()
 
         return {
             'updated': updated,
             'deleted': deleted,
             'errors': errors,
-            'to_delete': to_delete
+            'to_delete': to_delete,
+            'timeout_indices': timeout_indices
         }
 
     except Exception as e:
