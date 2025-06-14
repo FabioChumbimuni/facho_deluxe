@@ -108,8 +108,8 @@ a:hover {
 .form-row {
     background: var(--darker-bg);
     border-radius: 4px;
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: 15px;
+    margin-bottom: 15px;
     border: 1px solid var(--border-color);
 }
 
@@ -139,21 +139,137 @@ a:hover {
     transition: all 0.3s ease;
 }
 
-/* Estilo para los campos de formulario */
-input[type=text], input[type=password], input[type=email], input[type=number],
-input[type=url], input[type=tel], textarea, select {
+/* Estilo para campos de selección */
+select {
     background: var(--dark-bg);
     border: 1px solid var(--border-color);
     color: var(--text-color);
     border-radius: 4px;
+    padding: 8px 12px;
+    min-width: 200px;
+    height: auto;
+    font-size: 14px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* Estilo para checkboxes */
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.checkbox-row label {
+    color: var(--text-color);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* Estilo para campos de texto */
+input[type="text"], input[type="password"], input[type="email"], input[type="number"],
+input[type="url"], input[type="tel"], textarea {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    width: 100%;
+    max-width: 400px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus,
+input[type="number"]:focus, input[type="url"]:focus, input[type="tel"]:focus,
+textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* Estilo para etiquetas de formulario */
+.form-row label {
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    display: block;
+}
+
+/* Estilo para campos requeridos */
+.required label {
+    color: var(--text-color);
+}
+
+.required label:after {
+    content: " *";
+    color: var(--accent-color);
+}
+
+/* Estilo para campos de fecha y hora */
+.vDateField, .vTimeField {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    width: 200px;
+    font-size: 14px;
+}
+
+/* Estilo para campos de selección múltiple */
+select[multiple] {
+    height: auto;
+    min-height: 100px;
     padding: 8px;
 }
 
-input[type=text]:focus, input[type=password]:focus, input[type=email]:focus,
-input[type=number]:focus, input[type=url]:focus, input[type=tel]:focus,
-textarea:focus, select:focus {
-    border-color: var(--primary-color);
-    outline: none;
+select[multiple] option {
+    padding: 8px;
+    margin: 2px 0;
+    border-radius: 2px;
+}
+
+select[multiple] option:checked {
+    background: var(--primary-color);
+    color: var(--text-color);
+}
+
+/* Estilo para campos de radio */
+.radiolist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.radiolist label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.radiolist input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
 }
 
 /* Mejoras adicionales para la visibilidad */
