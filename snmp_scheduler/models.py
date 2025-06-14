@@ -183,13 +183,19 @@ class OnuDato(models.Model):
     modelo_onu         = models.CharField(max_length=100, db_column='modelo_onu',         null=True, blank=True)
 
     class Meta:
-        managed = False  # Siguen usando la tabla existente
         db_table = 'onu_datos'
-        verbose_name = 'Datos ONU'
-        verbose_name_plural = 'Datos ONUs'
-        unique_together = (('host', 'snmpindexonu'),)
+        managed = True
         indexes = [
-            models.Index(fields=['snmpindexonu']),
+            models.Index(fields=['host', 'snmpindexonu']),
+            models.Index(fields=['fecha']),
+            models.Index(fields=['estado_onu']),
+            models.Index(fields=['modelo_onu']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['host', 'snmpindexonu'],
+                name='unique_host_snmpindexonu'
+            )
         ]
 
     def __str__(self):
