@@ -39,13 +39,56 @@ def poller_aggregator(results, tarea_id, ejecucion_id, host_id):
 
     # Completar registro de EjecucionTareaSNMP
     ejec.fin = timezone.now()
-    ejec.estado = 'C'
-    ejec.resultado = {
-        'updated': total_updated,
-        'deleted': total_deleted,
-        'errors': all_errors
+    
+    # Recolectar información del protocolo y errores
+    protocol_info = {
+        'used': any(r.get('protocol_info', {}).get('used', False) for r in results),
+        'affected_lotes': sum(r.get('protocol_info', {}).get('affected_lotes', 0) for r in results),
+        'host': host.nombre,
+        'timeouts': []
     }
+    
+    # Procesar errores y timeouts
+    processed_errors = []
+    for r in results:
+        # Agregar errores de timeout al protocolo
+        for error in r.get('errors', []):
+            if 'timeout' in error.lower() or 'timed out' in error.lower():
+                protocol_info['timeouts'].append(error)
+            else:
+                processed_errors.append(error)
+    
+    # Determinar el estado final y mensaje
+    if protocol_info['used']:
+        protocol_info['message'] = (
+            f"🛡️ PROTOCOL ANTI-TIMEOUT ACTIVADO\n"
+            f"📊 Lotes procesados: {protocol_info['affected_lotes']}\n"
+            f"🎯 Host: {host.nombre}"
+        )
+        if protocol_info['timeouts']:
+            protocol_info['message'] += f"\n⚠️ Timeouts amortiguados: {len(protocol_info['timeouts'])}"
+        ejec.estado = 'P'  # Parcial si se usó el protocolo
+    else:
+        protocol_info['message'] = (
+            f"✅ PROCESO ESTÁNDAR\n"
+            f"🎯 Host: {host.nombre}\n"
+            f"📊 Registros actualizados: {total_updated}"
+        )
+        ejec.estado = 'C'  # Completado si no se usó el protocolo
+    
+    # Si hay errores no relacionados con timeout, marcar como parcial
+    if processed_errors:
+        ejec.estado = 'P'
+        protocol_info['message'] += f"\n❌ Errores encontrados: {len(processed_errors)}"
+    
+    # Formatear el resultado final
+    summary = f"📈 Actualizados: {total_updated} | 🗑️ Eliminados: {total_deleted} | ❌ Errores: {len(processed_errors)} | 🛡️ Protocolo: {'Activado' if protocol_info['used'] else 'No necesario'}"
+    
+    # Guardar el resultado completo en el log
+    logger.info(f"[aggregator] Completada ejecución {ejecucion_id} para host {host.nombre}: {summary}")
+    
+    # Guardar solo el resumen en el resultado
+    ejec.resultado = summary
     ejec.save()
 
-    logger.info(f"[aggregator] Completada ejecución {ejecucion_id} para host {host.nombre}: {ejec.resultado}")
     close_old_connections()

@@ -269,62 +269,84 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
                 return False
 
         # Si es un lote grande (200), intentamos procesarlo en subgrupos
+        protocol_used = False
+        protocol_lotes = 0
+        
         if len(indices) >= 200:
-            logger.info(f"[PROTOCOLO] Iniciando procesamiento de lote grande ({len(indices)} índices)")
+            logger.info(f"[PROCESO ESTANDAR] Iniciando procesamiento de lote grande ({len(indices)} índices) para host {host.nombre}")
             # Primero intentamos con el lote completo
             if not procesar_lote(indices):
-                logger.info("[PROTOCOLO] Timeout en lote completo, iniciando protocolo de subgrupos")
+                protocol_used = True
+                protocol_lotes += 1
+                logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout detectado en lote principal, iniciando protocolo de subgrupos")
                 # Si falla, dividimos en subgrupos de 50
                 subgrupos = [indices[i:i + 50] for i in range(0, len(indices), 50)]
-                logger.info(f"[PROTOCOLO] Dividido en {len(subgrupos)} subgrupos de 50 índices")
+                logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Lote principal dividido en {len(subgrupos)} subgrupos de 50 índices")
                 
                 for i, subgrupo in enumerate(subgrupos, 1):
-                    logger.info(f"[PROTOCOLO] Procesando subgrupo {i}/{len(subgrupos)} ({len(subgrupo)} índices)")
+                    logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Procesando subgrupo {i}/{len(subgrupos)} ({len(subgrupo)} índices)")
                     if not procesar_lote(subgrupo):
-                        logger.info(f"[PROTOCOLO] Timeout en subgrupo {i}, iniciando procesamiento individual")
+                        protocol_lotes += 1
+                        logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout en subgrupo {i}, iniciando procesamiento individual")
                         # Si falla el subgrupo, intentamos uno por uno con reintentos
                         for idx in subgrupo:
                             retry_count = 0
                             while retry_count < max_retries:
                                 try:
                                     if procesar_lote([idx], es_reintento=(retry_count > 0)):
-                                        logger.debug(f"[PROTOCOLO] Índice {idx} procesado exitosamente")
+                                        logger.debug(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Índice {idx} procesado exitosamente")
                                         break
                                     else:
                                         retry_count += 1
                                         if retry_count < max_retries:
-                                            logger.info(f"[PROTOCOLO] Reintentando índice {idx} (intento {retry_count + 1}/{max_retries})")
+                                            logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Reintentando índice {idx} (intento {retry_count + 1}/{max_retries})")
                                             time.sleep(retry_delay)
                                         else:
                                             timeout_indices.append(idx)
-                                            logger.error(f"[PROTOCOLO] Timeout en índice {idx} después de {max_retries} intentos")
+                                            logger.error(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout en índice {idx} después de {max_retries} intentos")
                                 except Exception as e:
-                                    logger.error(f"[PROTOCOLO] Error procesando índice {idx}: {str(e)}")
+                                    logger.error(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Error procesando índice {idx}: {str(e)}")
                                     errors.append(f"Error en índice {idx}: {str(e)}")
                                     break
                     else:
-                        logger.info(f"[PROTOCOLO] Subgrupo {i} procesado exitosamente")
+                        logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Subgrupo {i} procesado exitosamente")
         else:
             # Para lotes pequeños, procesamos normalmente
-            logger.info(f"[PROTOCOLO] Procesando lote pequeño ({len(indices)} índices)")
+            logger.info(f"[PROCESO ESTANDAR] Procesando lote pequeño ({len(indices)} índices) para host {host.nombre}")
             procesar_lote(indices)
 
         # Actualizar estado de ejecución
         if errors or timeout_indices:
             if timeout_indices:
-                errors.append(f"[PROTOCOLO] Timeout en índices después de {max_retries} intentos: {', '.join(timeout_indices)}")
+                errors.append(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout en índices después de {max_retries} intentos: {', '.join(timeout_indices)}")
             ejec.error = "\n".join(errors)
             ejec.estado = 'P'  # Parcial en lugar de F (Fallido)
             ejec.fin = timezone.now()
             ejec.save()
 
-        return {
+        result = {
             'updated': updated,
             'deleted': deleted,
             'errors': errors,
             'to_delete': to_delete,
             'timeout_indices': timeout_indices
         }
+
+        if protocol_used:
+            result['protocol_info'] = {
+                'used': True,
+                'host': host.nombre,
+                'affected_lotes': protocol_lotes,
+                'message': f"Se utilizó PROTOCOL ANTI-TIMEOUT en {protocol_lotes} lotes para {host.nombre}"
+            }
+        else:
+            result['protocol_info'] = {
+                'used': False,
+                'host': host.nombre,
+                'message': f"Proceso estándar completado para {host.nombre}"
+            }
+
+        return result
 
     except Exception as e:
         logger.error(f"Error general en poller_worker: {str(e)}", exc_info=True)
