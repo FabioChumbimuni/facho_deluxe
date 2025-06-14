@@ -14,6 +14,7 @@ from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato, Host, TrabajoSNMP
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
 from datetime import timedelta
+from django import forms
 
 # Modelo proxy para el Supervisor
 class Supervisor(TareaSNMP):
@@ -28,6 +29,21 @@ class EjecucionTareaSNMPInline(admin.TabularInline):
     extra = 0
     readonly_fields = ('inicio', 'fin', 'estado', 'resultado', 'error')
     can_delete = False
+    ordering = ['-inicio']
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Obtener los IDs de las 5 ejecuciones más recientes
+        latest_ids = EjecucionTareaSNMP.objects.filter(
+            tarea=models.OuterRef('tarea')
+        ).order_by('-inicio').values('id')[:5]
+        # Filtrar el queryset para mostrar solo esas ejecuciones
+        return qs.filter(id__in=models.Subquery(latest_ids))
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        formset.form.base_fields['tarea'].widget = forms.HiddenInput()
+        return formset
 
 @admin.register(TrabajoSNMP)
 class TrabajoSNMPAdmin(admin.ModelAdmin):
