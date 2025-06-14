@@ -138,6 +138,11 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Admin site customization
+ADMIN_SITE_HEADER = "Facho Deluxe Administration"
+ADMIN_SITE_TITLE = "Facho Deluxe Admin Portal"
+ADMIN_INDEX_TITLE = "Welcome to Facho Deluxe Portal"
+
 # Configuración de Django-Q
 Q_CLUSTER = {
     'name': 'DjangoQ',

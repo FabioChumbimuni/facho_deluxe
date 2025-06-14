@@ -1,0 +1,321 @@
+/* Estilo azul y rojo para el admin de Django */
+:root {
+    --primary-color: #1a73e8;  /* Azul Google */
+    --secondary-color: #dc3545; /* Rojo */
+    --dark-bg: #0a1929;        /* Azul muy oscuro */
+    --darker-bg: #132f4c;      /* Azul oscuro */
+    --text-color: #ffffff;
+    --accent-color: #dc3545;   /* Rojo */
+    --section-title: #ffffff;
+    --border-color: #1e4976;
+    --action-text: #ffffff;    /* Color más claro para textos de acciones */
+    --hover-bg: #1e4976;       /* Fondo para hover */
+}
+
+/* Fondo y colores generales */
+body {
+    background: var(--dark-bg);
+    color: var(--text-color);
+}
+
+/* Header del admin */
+#header {
+    background: var(--darker-bg);
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+#branding h1 {
+    color: var(--primary-color);
+}
+
+/* Sidebar */
+.module h2, .module caption {
+    background: var(--darker-bg);
+    color: var(--text-color);
+    font-weight: bold;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Títulos de secciones */
+.app-auth .models h2,
+.app-django_celery_results .models h2,
+.app-snmp_scheduler .models h2 {
+    color: var(--section-title);
+    font-size: 1.2em;
+    font-weight: bold;
+    padding: 10px;
+    background: var(--darker-bg);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+}
+
+/* Enlaces de modelos */
+.model-list a {
+    color: var(--text-color);
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.model-list a:hover {
+    background: var(--darker-bg);
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+/* Botones */
+.button, input[type=submit], input[type=button], .submit-row input {
+    background: var(--primary-color);
+    color: var(--text-color);
+    border: none;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.button:hover, input[type=submit]:hover, input[type=button]:hover {
+    background: #1557b0;  /* Azul más oscuro */
+    transform: translateY(-2px);
+}
+
+/* Enlaces */
+a:link, a:visited {
+    color: var(--action-text);
+}
+
+a:hover {
+    color: var(--action-text);
+    text-decoration: underline;
+}
+
+/* Tablas */
+#changelist table thead th {
+    background: var(--darker-bg);
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.row1 {
+    background: var(--dark-bg);
+}
+
+.row2 {
+    background: var(--darker-bg);
+}
+
+/* Formularios */
+.form-row {
+    background: var(--darker-bg);
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+}
+
+/* Mensajes */
+.messagelist {
+    background: var(--darker-bg);
+}
+
+.success {
+    background: var(--primary-color);
+    color: var(--text-color);
+}
+
+/* Efectos de hover */
+.module:hover {
+    border-color: var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+/* Personalización del logo */
+#header #branding h1 a:link, #header #branding h1 a:visited {
+    color: var(--primary-color);
+}
+
+/* Efectos de transición */
+* {
+    transition: all 0.3s ease;
+}
+
+/* Estilo para los campos de formulario */
+input[type=text], input[type=password], input[type=email], input[type=number],
+input[type=url], input[type=tel], textarea, select {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 8px;
+}
+
+input[type=text]:focus, input[type=password]:focus, input[type=email]:focus,
+input[type=number]:focus, input[type=url]:focus, input[type=tel]:focus,
+textarea:focus, select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+/* Mejoras adicionales para la visibilidad */
+.app-list .app {
+    background: var(--darker-bg);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.app-list .app:hover {
+    border-color: var(--primary-color);
+}
+
+.app-list .app .app-name {
+    color: var(--primary-color);
+    font-size: 1.3em;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+/* Estilo para las tablas */
+#changelist table {
+    border: 1px solid var(--border-color);
+}
+
+#changelist table td, #changelist table th {
+    border: 1px solid var(--border-color);
+}
+
+/* Estilo para los filtros */
+#changelist-filter {
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+}
+
+#changelist-filter h2 {
+    background: var(--darker-bg);
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+#changelist-filter li.selected a {
+    color: var(--action-text);
+    font-weight: bold;
+}
+
+/* Botones de acción */
+.addlink, .changelink, .deletelink {
+    background: var(--primary-color);
+    color: var(--text-color) !important;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+.deletelink {
+    background: var(--accent-color);
+}
+
+/* Mensajes de error */
+.errorlist {
+    color: var(--accent-color);
+}
+
+/* Mensajes de éxito */
+.success {
+    background: var(--primary-color);
+}
+
+/* Mensajes de advertencia */
+.warning {
+    background: #ffc107;
+    color: var(--dark-bg);
+}
+
+/* Estilo para las acciones recientes */
+.module h2, .module caption {
+    background: var(--darker-bg);
+    color: var(--text-color);
+    font-weight: bold;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Textos en las acciones recientes */
+.actionlist {
+    color: var(--action-text);
+    font-weight: 500;
+}
+
+.actionlist li {
+    color: var(--action-text);
+    margin-bottom: 8px;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.actionlist li:hover {
+    background: var(--hover-bg);
+}
+
+.actionlist a {
+    color: var(--action-text);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.actionlist a:hover {
+    color: var(--action-text);
+    text-decoration: underline;
+}
+
+/* Mejorar visibilidad de las fechas */
+.actionlist .mini {
+    color: #c0c0c0;
+    font-size: 0.9em;
+}
+
+/* Estilo para los módulos de acciones */
+.module {
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.module h2 {
+    padding: 12px;
+    margin: 0;
+    font-size: 1.1em;
+    background: var(--darker-bg);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--action-text);
+}
+
+.module ul {
+    padding: 12px;
+    margin: 0;
+}
+
+/* Mejorar visibilidad de los enlaces en las tablas */
+#changelist table a {
+    color: var(--action-text);
+}
+
+#changelist table a:hover {
+    color: var(--action-text);
+    text-decoration: underline;
+}
+
+/* Mejorar visibilidad de los enlaces en los filtros */
+#changelist-filter a {
+    color: var(--action-text);
+}
+
+#changelist-filter a:hover {
+    color: var(--action-text);
+    text-decoration: underline;
+}
+
+#changelist-filter li.selected a {
+    color: var(--action-text);
+    font-weight: bold;
+} 
