@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 TIPOS_PERMITIDOS = [
     'onudesc', 'estado_onu', 'last_down', 'pot_rx', 
     'pot_tx', 'last_down_t', 'distancia_m', 'modelo_onu',
-    'plan_onu'  # Agregado plan_onu a los tipos permitidos
+    'plan_onu', 'descubrimiento'  # Agregado descubrimiento a los tipos permitidos
 ]
 
 @shared_task(
@@ -22,9 +22,11 @@ TIPOS_PERMITIDOS = [
 )
 def ejecutar_bulk_wrapper(self, tarea_id=None, host_id=None):
     """
-    Procesa solo tareas con tipos válidos (TIPOS_PERMITIDOS).
-    Para ejecución manual (tarea_id especificado) no requiere que la tarea esté activa.
-    Para ejecución automática (tarea_id=None) solo procesa tareas activas.
+    Procesa una tarea SNMP para un host específico.
+    
+    Args:
+        tarea_id: ID de la tarea a ejecutar
+        host_id: ID del host a procesar (opcional)
     """
     close_old_connections()
     ahora = timezone.localtime()
@@ -41,16 +43,19 @@ def ejecutar_bulk_wrapper(self, tarea_id=None, host_id=None):
             # Si se especifica host_id, verificar que pertenece a la tarea
             if host_id:
                 host = Host.objects.get(pk=host_id)
-                if not tarea.hosts.filter(pk=host_id).exists():
-                    logger.warning(f"[master] Host {host_id} no pertenece a la tarea {tarea_id}")
+                if not host.activo:
+                    logger.warning(f"[master] Host {host.nombre} no está activo, saltando tarea {tarea_id}")
                     return
+                tareas = [(tarea, host)]
             else:
                 # Si no se especifica host_id, procesar todos los hosts de la tarea
+                tareas = []
                 for host in tarea.hosts.all():
-                    ejecutar_bulk_wrapper.delay(tarea_id, host.id)
-                return
+                    if host.activo:
+                        tareas.append((tarea, host))
+                    else:
+                        logger.warning(f"[master] Host {host.nombre} no está activo, saltando")
                 
-            tareas = [(tarea, host)]
         except (TareaSNMP.DoesNotExist, Host.DoesNotExist):
             logger.warning(f"[master] Tarea {tarea_id} o host {host_id} no existe o tiene tipo inválido.")
             return
@@ -64,7 +69,10 @@ def ejecutar_bulk_wrapper(self, tarea_id=None, host_id=None):
             trabajo__tipo__in=TIPOS_PERMITIDOS
         ).order_by('trabajo__modo'):
             for host in tarea.hosts.all():
-                tareas.append((tarea, host))
+                if host.activo:  # Solo agregar si el host está activo
+                    tareas.append((tarea, host))
+                else:
+                    logger.warning(f"[master] Host {host.nombre} no está activo, saltando tarea {tarea.id}")
 
     # 2) Procesar cada tarea
     for tarea, host in tareas:
@@ -73,7 +81,7 @@ def ejecutar_bulk_wrapper(self, tarea_id=None, host_id=None):
             tarea=tarea,
             inicio=ahora,
             estado='E',
-            host=host
+            host=host  # Agregar el host a la ejecución
         )
 
         # 3) Obtener índices existentes para ese host

@@ -14,6 +14,8 @@ class Host(models.Model):
     activo = models.BooleanField(default=True, verbose_name='Activo')
     fecha_creacion = models.DateTimeField(auto_now_add=True, null=True, verbose_name='Fecha de Creación')
     fecha_modificacion = models.DateTimeField(auto_now=True, null=True, verbose_name='Última Modificación')
+    desactivado_por_timeout = models.BooleanField(default=False, help_text="Indica si el host fue desactivado por el protocolo anti-timeout")
+    ultimo_timeout = models.DateTimeField(null=True, blank=True, help_text="Última vez que el host tuvo un timeout")
 
     class Meta:
         verbose_name = 'Host'
@@ -184,7 +186,7 @@ class OnuDato(models.Model):
 
     class Meta:
         db_table = 'onu_datos'
-        managed = True
+        managed = False  # Cambiado a False para que Django no intente gestionar la tabla
         indexes = [
             models.Index(fields=['host', 'snmpindexonu']),
             models.Index(fields=['fecha']),

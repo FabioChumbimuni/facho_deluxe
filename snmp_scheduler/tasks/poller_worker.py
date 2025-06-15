@@ -10,6 +10,7 @@ from .common import logger
 import time
 from threading import Semaphore
 from collections import defaultdict
+from .host_verifier import verificar_host
 
 # Control de concurrencia por OLT
 olt_semaphores = defaultdict(lambda: Semaphore(5))  # Máximo 5 consultas simultáneas por OLT
@@ -50,6 +51,21 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
         tarea = TareaSNMP.objects.get(pk=tarea_id)
         ejec = EjecucionTareaSNMP.objects.get(pk=ejecucion_id)
         host = Host.objects.get(pk=host_id)
+
+        # Verificar si el host está activo
+        if not host.activo:
+            error_msg = f"Host {host.nombre} no está activo"
+            logger.warning(error_msg)
+            ejec.error = error_msg
+            ejec.estado = 'F'
+            ejec.fin = timezone.now()
+            ejec.save()
+            return {
+                'updated': 0,
+                'deleted': 0,
+                'errors': [error_msg],
+                'to_delete': []
+            }
 
         # Obtener semáforo para esta OLT
         semaphore = olt_semaphores[host.ip]
@@ -136,6 +152,21 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
 
             def procesar_lote(indices_lote, es_reintento=False):
                 nonlocal updated, deleted, errors, timeout_indices
+                
+                # Verificar si el host sigue activo
+                try:
+                    host.refresh_from_db()
+                    if not host.activo:
+                        error_msg = f"Host {host.nombre} fue desactivado durante el procesamiento"
+                        logger.warning(error_msg)
+                        errors.append(error_msg)
+                        return False
+                except Host.DoesNotExist:
+                    error_msg = f"Host {host.nombre} fue eliminado durante el procesamiento"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+                    return False
+                
                 oid_list_lote = [f"{base_oid}.{idx}" for idx in indices_lote]
                 
                 try:
@@ -296,22 +327,57 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
             
             if len(indices) >= 200:
                 logger.info(f"[PROCESO ESTANDAR] Iniciando procesamiento de lote grande ({len(indices)} índices) para host {host.nombre}")
+                
+                # Verificar estado del host antes del lote principal
+                host.refresh_from_db()
+                if not host.activo:
+                    error_msg = f"Host {host.nombre} desactivado antes de procesar lote principal"
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+                    return {
+                        'updated': updated,
+                        'deleted': deleted,
+                        'errors': errors,
+                        'to_delete': to_delete,
+                        'timeout_indices': timeout_indices
+                    }
+                
                 # Primero intentamos con el lote completo
                 if not procesar_lote(indices):
                     protocol_used = True
                     protocol_lotes += 1
                     logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout detectado en lote principal, iniciando protocolo de subgrupos")
-                    # Si falla, dividimos en subgrupos de 50
+                    
+                    # Activar protocolo verificador
+                    verificar_host.delay(host_id=host.id)
+                    
+                    # Dividimos en subgrupos de 50
                     subgrupos = [indices[i:i + 50] for i in range(0, len(indices), 50)]
                     logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Lote principal dividido en {len(subgrupos)} subgrupos de 50 índices")
                     
                     for i, subgrupo in enumerate(subgrupos, 1):
+                        # Verificar estado del host antes de cada subgrupo
+                        host.refresh_from_db()
+                        if not host.activo:
+                            error_msg = f"Host {host.nombre} desactivado durante procesamiento de subgrupos"
+                            logger.warning(error_msg)
+                            errors.append(error_msg)
+                            break
+                            
                         logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Procesando subgrupo {i}/{len(subgrupos)} ({len(subgrupo)} índices)")
                         if not procesar_lote(subgrupo):
                             protocol_lotes += 1
                             logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout en subgrupo {i}, iniciando procesamiento individual")
                             # Si falla el subgrupo, intentamos uno por uno con reintentos
                             for idx in subgrupo:
+                                # Verificar estado del host antes de cada índice individual
+                                host.refresh_from_db()
+                                if not host.activo:
+                                    error_msg = f"Host {host.nombre} desactivado durante procesamiento individual"
+                                    logger.warning(error_msg)
+                                    errors.append(error_msg)
+                                    break
+                                    
                                 retry_count = 0
                                 while retry_count < max_retries:
                                     try:
@@ -335,9 +401,15 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
                 else:
                     logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Proceso estándar completado para {host.nombre}")
             else:
-                # Para lotes pequeños, procesamos normalmente
-                logger.info(f"[PROCESO ESTANDAR] Procesando lote pequeño ({len(indices)} índices) para host {host.nombre}")
-                procesar_lote(indices)
+                # Para lotes pequeños, verificar estado del host y procesar normalmente
+                host.refresh_from_db()
+                if not host.activo:
+                    error_msg = f"Host {host.nombre} desactivado antes de procesar lote pequeño"
+                    logger.warning(error_msg)
+                    errors.append(error_msg)
+                else:
+                    logger.info(f"[PROCESO ESTANDAR] Procesando lote pequeño ({len(indices)} índices) para host {host.nombre}")
+                    procesar_lote(indices)
 
             # Actualizar estado de ejecución
             if errors or timeout_indices:

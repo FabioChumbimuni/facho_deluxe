@@ -13,8 +13,10 @@ from django.utils.timezone import localtime
 from .models import TareaSNMP, EjecucionTareaSNMP, OnuDato, Host, TrabajoSNMP
 from .tasks.handlers import TASK_HANDLERS
 from .tasks.delete import delete_history_records
+from .tasks.poller_master import ejecutar_bulk_wrapper
 from datetime import timedelta
 from django import forms
+from django.contrib import messages
 
 # Modelo proxy para el Supervisor
 class Supervisor(TareaSNMP):
@@ -94,19 +96,78 @@ class TareaSNMPAdmin(admin.ModelAdmin):
         return my_urls + urls
 
     def ejecutar_tarea(self, request, tarea_id):
+        """
+        Ejecuta una tarea manualmente desde el admin.
+        """
         try:
             tarea = TareaSNMP.objects.get(pk=tarea_id)
+            
+            # Obtener el handler correcto según el tipo de tarea
             handler = TASK_HANDLERS.get(tarea.trabajo.tipo)
-            if handler:
-                # Ejecutar para cada host
-                for host in tarea.hosts.all():
-                    handler.apply_async(args=[tarea_id, host.id])
-                self.message_user(request, f"✅ Tarea {tarea.nombre} enviada a la cola de ejecución para {tarea.hosts.count()} hosts")
-            else:
-                self.message_user(request, f"⚠️ Tipo de tarea desconocido: {tarea.trabajo.tipo}", level='warning')
+            if not handler:
+                self.message_user(
+                    request,
+                    f"Tipo de tarea no soportado: {tarea.trabajo.tipo}",
+                    level=messages.ERROR
+                )
+                return HttpResponseRedirect(
+                    reverse('admin:snmp_scheduler_tareasnmp_changelist')
+                )
+            
+            # Verificar hosts activos
+            hosts_activos = tarea.hosts.filter(activo=True)
+            hosts_inactivos = tarea.hosts.filter(activo=False)
+            
+            if not hosts_activos.exists():
+                # Si no hay hosts activos, mostrar mensaje
+                if hosts_inactivos.exists():
+                    hosts_names = ", ".join([h.nombre for h in hosts_inactivos])
+                    self.message_user(
+                        request,
+                        f"No se puede ejecutar la tarea. Los siguientes hosts están desactivados: {hosts_names}",
+                        level=messages.WARNING
+                    )
+                else:
+                    self.message_user(
+                        request,
+                        "La tarea no tiene hosts asignados",
+                        level=messages.WARNING
+                    )
+                return HttpResponseRedirect(
+                    reverse('admin:snmp_scheduler_tareasnmp_changelist')
+                )
+            
+            # Ejecutar la tarea para cada host activo
+            for host in hosts_activos:
+                handler.delay(tarea_id=tarea_id, host_id=host.id)
+                self.message_user(
+                    request,
+                    f"Tarea {tarea.id} ({tarea.trabajo.tipo}) encolada para host {host.nombre}",
+                    level=messages.SUCCESS
+                )
+            
+            # Si hay algunos hosts inactivos, mostrar advertencia
+            if hosts_inactivos.exists():
+                hosts_names = ", ".join([h.nombre for h in hosts_inactivos])
+                self.message_user(
+                    request,
+                    f"Nota: Los siguientes hosts están desactivados y fueron omitidos: {hosts_names}",
+                    level=messages.INFO
+                )
+            
+            return HttpResponseRedirect(
+                reverse('admin:snmp_scheduler_tareasnmp_changelist')
+            )
+        
         except TareaSNMP.DoesNotExist:
-            self.message_user(request, f"❌ La tarea con ID {tarea_id} no existe", level='error')
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER', '../'))
+            self.message_user(
+                request,
+                f"La tarea {tarea_id} no existe",
+                level=messages.ERROR
+            )
+            return HttpResponseRedirect(
+                reverse('admin:snmp_scheduler_tareasnmp_changelist')
+            )
 
     def ejecutar_ahora(self, request, queryset):
         for tarea in queryset:
