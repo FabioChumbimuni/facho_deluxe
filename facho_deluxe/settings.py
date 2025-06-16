@@ -241,3 +241,28 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"  # Usa la base de datos p
 SESSION_COOKIE_AGE = 86400  # 24 horas
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_SAVE_EVERY_REQUEST = True
+
+# Configuración de colas
+CELERY_TASK_DEFAULT_QUEUE = 'principal'
+CELERY_TASK_QUEUES = {
+    'principal': {
+        'exchange': 'principal',
+        'routing_key': 'principal',
+    },
+    'secundario': {
+        'exchange': 'secundario',
+        'routing_key': 'secundario',
+    },
+    'verificador': {
+        'exchange': 'verificador',
+        'routing_key': 'verificador',
+    },
+}
+
+# Cache configuration (Redis)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}

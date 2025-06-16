@@ -11,6 +11,9 @@ import time
 from threading import Semaphore
 from collections import defaultdict
 from .host_verifier import verificar_host
+from datetime import timedelta
+from celery.exceptions import TimeoutError
+from django.core.cache import cache
 
 # Control de concurrencia por OLT
 olt_semaphores = defaultdict(lambda: Semaphore(5))  # Máximo 5 consultas simultáneas por OLT
@@ -308,10 +311,43 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
                             except Exception as e:
                                 logger.error(f"Error actualizando {campo} para {onu_id}: {str(e)}")
                                 errors.append(f"Error en ONU {onu_id}: {str(e)}")
+                                continue
                     return True
                 except EasySNMPTimeoutError as e:
                     error_msg = f"Timeout SNMP en {host.ip}: {str(e)}"
                     logger.error(error_msg)
+                    
+                    # PROTOCOL ANTITIMEOUT: Consultar al PROTOCOL VERIFICADOR
+                    verificacion_key = f"verificacion_en_curso_{host.id}"
+                    lock_key = f"verificador_lock_{host.id}"
+                    
+                    if not cache.get(verificacion_key):
+                        # No hay verificación en curso, intentar adquirir lock
+                        if cache.add(lock_key, True, timeout=300):  # Lock atómico
+                            try:
+                                # Marcar que estamos iniciando verificación
+                                cache.set(verificacion_key, "iniciando", timeout=300)
+                                logger.warning(f"[PROTOCOL ANTITIMEOUT] Solicitando verificación para {host.nombre}")
+                                
+                                # Lanzar verificación
+                                task_id = f"verificador-{host.id}-{timezone.now().timestamp()}"
+                                task = verificar_host.apply_async(
+                                    args=[host.id],
+                                    queue='verificador',
+                                    countdown=0,
+                                    task_id=task_id
+                                )
+                                logger.info(f"[PROTOCOL ANTITIMEOUT] Verificación solicitada: {task_id}")
+                            except Exception as e:
+                                logger.error(f"[PROTOCOL ANTITIMEOUT] Error enviando verificación: {str(e)}")
+                                cache.delete(verificacion_key)
+                                cache.delete(lock_key)
+                        else:
+                            logger.info(f"[PROTOCOL ANTITIMEOUT] Lock en uso para {host.nombre}, verificación ya solicitada")
+                    else:
+                        estado = cache.get(verificacion_key)
+                        logger.info(f"[PROTOCOL ANTITIMEOUT] Ya existe verificación para {host.nombre} (estado: {estado})")
+                    
                     if not es_reintento:
                         logger.info(f"Timeout en lote de {len(indices_lote)} índices")
                     return False
@@ -347,9 +383,6 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
                     protocol_used = True
                     protocol_lotes += 1
                     logger.info(f"[PROTOCOL ANTI-TIMEOUT] {host.nombre} - Timeout detectado en lote principal, iniciando protocolo de subgrupos")
-                    
-                    # Activar protocolo verificador
-                    verificar_host.delay(host_id=host.id)
                     
                     # Dividimos en subgrupos de 50
                     subgrupos = [indices[i:i + 50] for i in range(0, len(indices), 50)]

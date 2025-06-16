@@ -2,94 +2,140 @@
 
 import logging
 import subprocess
+import socket
 from celery import shared_task
 from django.utils import timezone
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
+from django.core.cache import cache
 from ..models import Host
-from datetime import timedelta
+from celery.utils.log import get_task_logger
+import time
 
-logger = logging.getLogger(__name__)
+logger = get_task_logger(__name__)
 
-def check_host_ping(ip_address, num_packets=4):
+def check_host_ping(ip_address, num_pings=3):
     """
-    Realiza prueba de ping al host.
-    Retorna el número de paquetes exitosos.
+    Realiza una verificación rigurosa del host:
+    1. Múltiples pings con diferentes timeouts
+    2. Verifica que la IP sea válida
+    3. Registra tiempos de respuesta
     """
     try:
-        # Usar ping con timeout de 2 segundos y 4 paquetes
-        cmd = ['ping', '-c', str(num_packets), '-W', '2', ip_address]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Validar formato de IP
+        try:
+            socket.inet_aton(ip_address)
+        except socket.error:
+            logger.error(f"[PROTOCOL VERIFICADOR] IP inválida: {ip_address}")
+            return False, "IP inválida"
+
+        # Realizar múltiples pings con diferentes timeouts
+        successful_pings = 0
+        total_time = 0
         
-        # Extraer número de paquetes recibidos
-        if result.returncode == 0:
-            # Buscar la línea con las estadísticas
-            for line in result.stdout.split('\n'):
-                if 'packets transmitted' in line:
-                    stats = line.split(',')
-                    received = int(stats[1].strip().split()[0])
-                    return received
-        return 0
+        for i in range(num_pings):
+            timeout = 2 if i == 0 else 3  # Primer ping más rápido
+            cmd = ['ping', '-c', '1', '-W', str(timeout), ip_address]
+            start_time = time.time()
+            
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout+1)
+                if result.returncode == 0:
+                    successful_pings += 1
+                    # Extraer tiempo de respuesta
+                    for line in result.stdout.split('\n'):
+                        if 'time=' in line:
+                            try:
+                                time_ms = float(line.split('time=')[1].split()[0])
+                                total_time += time_ms
+                                logger.info(f"[PROTOCOL VERIFICADOR] Ping {i+1} exitoso: {time_ms}ms")
+                            except:
+                                pass
+                else:
+                    logger.warning(f"[PROTOCOL VERIFICADOR] Ping {i+1} falló: {result.stderr}")
+            except subprocess.TimeoutExpired:
+                logger.warning(f"[PROTOCOL VERIFICADOR] Ping {i+1} timeout")
+            
+            # Pequeña pausa entre pings
+            if i < num_pings - 1:
+                time.sleep(0.5)
+        
+        # Análisis de resultados
+        success_rate = (successful_pings / num_pings) * 100
+        avg_time = total_time / successful_pings if successful_pings > 0 else 0
+        
+        if successful_pings == 0:
+            return False, f"0% pings exitosos ({num_pings} intentos)"
+        elif successful_pings < num_pings:
+            return False, f"{success_rate}% pings exitosos, tiempo promedio: {avg_time:.1f}ms"
+        else:
+            return True, f"100% pings exitosos, tiempo promedio: {avg_time:.1f}ms"
+            
     except Exception as e:
-        logger.error(f"Error checking ping for {ip_address}: {str(e)}")
-        return 0
+        logger.error(f"[PROTOCOL VERIFICADOR] Error en verificación de {ip_address}: {str(e)}")
+        return False, f"Error: {str(e)}"
 
 @shared_task(
     bind=True,
     name='snmp_scheduler.tasks.verificar_host',
-    queue='secundario'
+    queue='verificador',
+    ignore_result=True,
+    max_retries=0,
+    time_limit=20  # Aumentado para permitir verificación más rigurosa
 )
-def verificar_host(self, host_id, is_retry=False):
+def verificar_host(self, host_id):
     """
-    Verifica el estado de un host mediante ping y actualiza su estado.
-    
-    Args:
-        host_id: ID del host a verificar
-        is_retry: Indica si es un reintento después de 15 minutos
+    PROTOCOL VERIFICADOR:
+    1. Se ejecuta cuando hay un timeout SNMP
+    2. Realiza verificación rigurosa con múltiples pings
+    3. Si no responde, desactiva el host
+    4. Mantiene estado en Redis para comunicación con PROTOCOL ANTITIMEOUT
     """
-    close_old_connections()
+    verificacion_key = f"verificacion_en_curso_{host_id}"
     
     try:
-        host = Host.objects.get(pk=host_id)
-        
-        # Si el host fue desactivado manualmente, no ejecutar el protocolo
-        if not host.activo and not host.desactivado_por_timeout:
-            logger.info(f"Host {host.nombre} fue desactivado manualmente, saltando verificación")
+        # Intentar establecer la marca de verificación en Redis
+        # Si ya existe una verificación, salir inmediatamente
+        if not cache.add(verificacion_key, "iniciando", timeout=300):
+            logger.info(f"[PROTOCOL VERIFICADOR] Ya existe una verificación en proceso para host_id={host_id}")
             return
             
-        # Realizar prueba de ping
-        packets_received = check_host_ping(host.ip)
-        logger.info(f"Host {host.nombre} - Paquetes recibidos: {packets_received}/4")
-        
-        if packets_received <= 1:  # Si fallan 3 o más paquetes
-            if not is_retry:
-                # Primera falla - Desactivar y programar reintento
+        with transaction.atomic():
+            try:
+                host = Host.objects.select_for_update().get(pk=host_id)
+            except Host.DoesNotExist:
+                logger.error(f"[PROTOCOL VERIFICADOR] No existe host con id={host_id}")
+                cache.delete(verificacion_key)
+                return
+                
+            # Si ya está desactivado, no hacer nada
+            if not host.activo:
+                logger.info(f"[PROTOCOL VERIFICADOR] Host {host.nombre} ya está desactivado")
+                cache.delete(verificacion_key)
+                return
+                
+            # Actualizar estado en Redis
+            cache.set(verificacion_key, "en_proceso", timeout=300)
+            logger.info(f"[PROTOCOL VERIFICADOR] Iniciando verificación rigurosa de {host.nombre} (IP: {host.ip})")
+            
+            # Realizar verificación rigurosa
+            ping_ok, detalles = check_host_ping(host.ip, num_pings=3)
+            logger.info(f"[PROTOCOL VERIFICADOR] Resultado verificación de {host.nombre}: {detalles}")
+            
+            if not ping_ok:
+                # Desactivar host
+                logger.warning(f"[PROTOCOL VERIFICADOR] Host {host.nombre} no responde - Desactivando. Detalles: {detalles}")
                 host.activo = False
-                host.desactivado_por_timeout = True
-                host.ultimo_timeout = timezone.now()
                 host.save()
-                
-                # Programar reintento en 15 minutos
-                verificar_host.apply_async(
-                    args=[host_id, True],
-                    countdown=900  # 15 minutos
-                )
-                logger.warning(f"Host {host.nombre} desactivado por timeout. Reintento en 15 minutos")
+                logger.info(f"[PROTOCOL VERIFICADOR] Host {host.nombre} desactivado exitosamente")
+                cache.set(verificacion_key, f"desactivado - {detalles}", timeout=300)
             else:
-                # Reintento fallido - Mantener desactivado
-                logger.error(f"Host {host.nombre} - Reintento fallido, se mantiene desactivado")
-        else:
-            # Ping exitoso
-            if is_retry or host.desactivado_por_timeout:
-                # Reactivar solo si fue desactivado por timeout
-                host.activo = True
-                host.desactivado_por_timeout = False
-                host.save()
-                logger.info(f"Host {host.nombre} reactivado después de timeout")
+                logger.info(f"[PROTOCOL VERIFICADOR] Host {host.nombre} responde correctamente. Detalles: {detalles}")
+                cache.set(verificacion_key, f"activo - {detalles}", timeout=300)
                 
-    except Host.DoesNotExist:
-        logger.error(f"Host {host_id} no existe")
     except Exception as e:
-        logger.error(f"Error verificando host {host_id}: {str(e)}")
-        
+        logger.error(f"[PROTOCOL VERIFICADOR] Error verificando host_id={host_id}: {str(e)}")
+        cache.set(verificacion_key, f"error - {str(e)}", timeout=300)
     finally:
-        close_old_connections() 
+        # No eliminamos la clave de verificación aquí para mantener el estado
+        # Se eliminará automáticamente después del timeout
+        pass 
