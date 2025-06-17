@@ -1,5 +1,7 @@
 from django.db import models
 from django.utils.timezone import now
+from django.utils import timezone
+from snmp_scheduler.models import OnuDato  # Importamos el modelo desde snmp_scheduler
 
 class Script(models.Model):
     TIPO_CHOICES = (
@@ -83,23 +85,3 @@ class BloqueEjecucionRecord(models.Model):
 
     def __str__(self):
         return f"Ejecución de {self.bloque.nombre} iniciada el {self.inicio}"
-
-
-class OnuDatos(models.Model):
-    id = models.AutoField(primary_key=True)
-    host = models.CharField(max_length=100)
-    snmpindex = models.CharField(max_length=100)
-    snmpindexonu = models.CharField(max_length=50, unique=True)
-    slotportonu = models.CharField(max_length=30)
-    onudesc = models.CharField(max_length=255)
-    serialonu = models.CharField(max_length=50)
-    fecha = models.DateTimeField(auto_now_add=True)
-    onulogico = models.IntegerField()
-    act_susp = models.CharField(max_length=10)
-
-    class Meta:
-        managed = False  # Evita que Django intente modificar la tabla existente
-        db_table = 'onu_datos'  # Nombre exacto de la tabla en PostgreSQL
-
-    def __str__(self):
-        return f"{self.host} - {self.serialonu}"

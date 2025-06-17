@@ -158,40 +158,41 @@ class TareaSNMP(models.Model):
 
 class OnuDato(models.Model):
     """
-    Refleja la tabla existente 'onu_datos'. 
-    Incluye nuevas columnas para cada subtipo bulk.
+    Modelo central para la tabla 'onu_datos'.
+    Este es el único modelo que debe gestionar esta tabla.
     """
-    id             = models.AutoField(primary_key=True, db_column='id')
-    host           = models.CharField(max_length=100, db_column='host')
-    snmpindex      = models.CharField(max_length=100, db_column='snmpindex')
-    snmpindexonu   = models.CharField(max_length=50,  db_column='snmpindexonu')
-    slotportonu    = models.CharField(max_length=30,  db_column='slotportonu')
-    onulogico      = models.IntegerField(db_column='onulogico')
+    id             = models.AutoField(primary_key=True)
+    host           = models.CharField(max_length=100)
+    snmpindex      = models.CharField(max_length=100)
+    snmpindexonu   = models.CharField(max_length=50)
+    slotportonu    = models.CharField(max_length=30)
+    onulogico      = models.IntegerField()
+    host_name      = models.CharField(max_length=50, null=True, blank=True)
 
     # Campos base
-    onudesc        = models.CharField(max_length=255, db_column='onudesc', null=True, blank=True)
-    act_susp       = models.CharField(max_length=10,  db_column='act_susp')
-    serialonu      = models.CharField(max_length=50,  db_column='serialonu')
-    fecha          = models.DateTimeField(db_column='fecha')
-    enviar         = models.BooleanField(default=False, db_column='enviar')
+    onudesc        = models.CharField(max_length=255, null=True, blank=True)
+    act_susp       = models.CharField(max_length=10)
+    serialonu      = models.CharField(max_length=50)
+    fecha          = models.DateTimeField(auto_now_add=True)
+    enviar         = models.BooleanField(default=False)
 
-    # ——— Nuevos campos para cada subtipo bulk ———
-    estado_onu         = models.CharField(max_length=50,  db_column='estado_onu',         null=True, blank=True)
-    plan_onu           = models.CharField(max_length=50,  db_column='plan_onu',           null=True, blank=True)
-    potencia_rx        = models.CharField(max_length=50,  db_column='potencia_rx',        null=True, blank=True)
-    potencia_tx        = models.CharField(max_length=50,  db_column='potencia_tx',        null=True, blank=True)
-    last_down_time     = models.CharField(max_length=50,  db_column='last_down_time',     null=True, blank=True)
-    distancia_m        = models.CharField(max_length=50,  db_column='distancia_m',        null=True, blank=True)
-    modelo_onu         = models.CharField(max_length=100, db_column='modelo_onu',         null=True, blank=True)
+    # Campos para cada subtipo bulk
+    estado_onu         = models.CharField(max_length=50,  null=True, blank=True)
+    plan_onu           = models.CharField(max_length=50,  null=True, blank=True)
+    potencia_rx        = models.CharField(max_length=50,  null=True, blank=True)
+    potencia_tx        = models.CharField(max_length=50,  null=True, blank=True)
+    last_down_time     = models.CharField(max_length=50,  null=True, blank=True)
+    distancia_m        = models.CharField(max_length=50,  null=True, blank=True)
+    modelo_onu         = models.CharField(max_length=100, null=True, blank=True)
 
     class Meta:
         db_table = 'onu_datos'
-        managed = False  # Cambiado a False para que Django no intente gestionar la tabla
+        managed = True  # Ahora Django gestionará la tabla
         indexes = [
-            models.Index(fields=['host', 'snmpindexonu']),
-            models.Index(fields=['fecha']),
-            models.Index(fields=['estado_onu']),
-            models.Index(fields=['modelo_onu']),
+            models.Index(fields=['host', 'snmpindexonu'], name='idx_host_snmpindexonu'),
+            models.Index(fields=['fecha'], name='idx_fecha'),
+            models.Index(fields=['estado_onu'], name='idx_estado_onu'),
+            models.Index(fields=['modelo_onu'], name='idx_modelo_onu'),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -201,7 +202,7 @@ class OnuDato(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.snmpindexonu}"
+        return f"{self.host} - {self.snmpindexonu}"
 
 
 class EjecucionTareaSNMP(models.Model):
