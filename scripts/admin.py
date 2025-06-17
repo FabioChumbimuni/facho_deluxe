@@ -6,7 +6,6 @@ from .models import (
     BloqueEjecucion,
     BloqueEjecucionRecord,
 )
-from snmp_scheduler.models import OnuDato
 from django import forms
 from django.conf import settings
 from django.urls import reverse
@@ -91,10 +90,3 @@ class BloqueEjecucionRecordAdmin(admin.ModelAdmin):
     list_display = ('bloque', 'inicio', 'fin', 'estado')
     list_filter = ('estado', 'bloque__nombre')
     search_fields = ('bloque__nombre',)
-
-
-@admin.register(OnuDato)
-class OnuDatoAdmin(admin.ModelAdmin):
-    list_display = ('host', 'slotportonu','onulogico', 'onudesc', 'act_susp')
-    list_filter = ('host','act_susp')
-    search_fields = ('host', 'slotportonu', 'serialonu', 'onudesc')

@@ -158,41 +158,36 @@ class TareaSNMP(models.Model):
 
 class OnuDato(models.Model):
     """
-    Modelo central para la tabla 'onu_datos'.
-    Este es el único modelo que debe gestionar esta tabla.
+    Refleja la tabla existente 'onu_datos'. 
     """
-    id             = models.AutoField(primary_key=True)
-    host           = models.CharField(max_length=100)
-    snmpindex      = models.CharField(max_length=100)
-    snmpindexonu   = models.CharField(max_length=50)
-    slotportonu    = models.CharField(max_length=30)
-    onulogico      = models.IntegerField()
-    host_name      = models.CharField(max_length=50, null=True, blank=True)
-
-    # Campos base
-    onudesc        = models.CharField(max_length=255, null=True, blank=True)
-    act_susp       = models.CharField(max_length=10)
-    serialonu      = models.CharField(max_length=50)
-    fecha          = models.DateTimeField(auto_now_add=True)
-    enviar         = models.BooleanField(default=False)
-
-    # Campos para cada subtipo bulk
-    estado_onu         = models.CharField(max_length=50,  null=True, blank=True)
-    plan_onu           = models.CharField(max_length=50,  null=True, blank=True)
-    potencia_rx        = models.CharField(max_length=50,  null=True, blank=True)
-    potencia_tx        = models.CharField(max_length=50,  null=True, blank=True)
-    last_down_time     = models.CharField(max_length=50,  null=True, blank=True)
-    distancia_m        = models.CharField(max_length=50,  null=True, blank=True)
-    modelo_onu         = models.CharField(max_length=100, null=True, blank=True)
+    # Campos en el orden exacto de la tabla
+    id = models.AutoField(primary_key=True)  # nextval('onu_datos_id_seq'::regclass)
+    host = models.CharField(max_length=100, null=False)  # NO NULL
+    snmpindex = models.CharField(max_length=100, null=True)  # YES NULL
+    snmpindexonu = models.CharField(max_length=50, null=False)  # NO NULL
+    slotportonu = models.CharField(max_length=30, null=True)  # YES NULL
+    onulogico = models.IntegerField(null=True)  # YES NULL
+    onudesc = models.CharField(max_length=255, null=True)  # YES NULL
+    serialonu = models.CharField(max_length=50, null=True)  # YES NULL
+    act_susp = models.CharField(max_length=10, null=False)  # NO NULL
+    fecha = models.DateTimeField(null=True)  # YES NULL, CURRENT_TIMESTAMP
+    enviar = models.BooleanField(null=True, default=False)  # YES NULL, default false
+    estado_onu = models.CharField(max_length=50, null=True)  # YES NULL
+    potencia_rx = models.CharField(max_length=50, null=True)  # YES NULL
+    potencia_tx = models.CharField(max_length=50, null=True)  # YES NULL
+    last_down_time = models.CharField(max_length=50, null=True)  # YES NULL
+    distancia_m = models.CharField(max_length=50, null=True)  # YES NULL
+    modelo_onu = models.CharField(max_length=100, null=True)  # YES NULL
+    plan_onu = models.CharField(max_length=50, null=True)  # YES NULL
 
     class Meta:
         db_table = 'onu_datos'
-        managed = True  # Ahora Django gestionará la tabla
+        managed = True  # Django gestionará la tabla
         indexes = [
             models.Index(fields=['host', 'snmpindexonu'], name='idx_host_snmpindexonu'),
             models.Index(fields=['fecha'], name='idx_fecha'),
             models.Index(fields=['estado_onu'], name='idx_estado_onu'),
-            models.Index(fields=['modelo_onu'], name='idx_modelo_onu'),
+            models.Index(fields=['modelo_onu'], name='idx_modelo_onu')
         ]
         constraints = [
             models.UniqueConstraint(
