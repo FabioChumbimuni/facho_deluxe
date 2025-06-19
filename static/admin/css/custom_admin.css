@@ -1,11 +1,8 @@
-/* Estilo azul y rojo para el admin de Django - Versión simplificada y funcional */
-
-/* Variables CSS básicas */
+/* Estilo azul y rojo para el admin de Django - Compatible con modo claro y oscuro */
 :root {
     --primary-color: #1a73e8;  /* Azul Google */
     --secondary-color: #dc3545; /* Rojo */
     --accent-color: #dc3545;   /* Rojo */
-    --filter-width: 240px;     /* Ancho del panel de filtros */
 }
 
 /* Modo claro (por defecto) */
@@ -13,12 +10,10 @@
     --dark-bg: #ffffff;        /* Fondo blanco */
     --darker-bg: #f8f9fa;      /* Fondo gris claro */
     --text-color: #333333;     /* Texto oscuro */
-    --section-title: #333333;  /* Títulos en negro */
+    --section-title: #1a73e8;  /* Títulos en azul */
     --border-color: #dee2e6;   /* Bordes grises claros */
     --action-text: #1a73e8;    /* Enlaces en azul */
     --hover-bg: #e3f2fd;       /* Hover azul claro */
-    --link-color: #1a73e8;     /* Color de enlaces */
-    --link-hover: #1557b0;     /* Color de enlaces al hover */
 }
 
 /* Modo oscuro */
@@ -51,461 +46,489 @@ body {
     color: var(--primary-color);
 }
 
-/* Estilos específicos para la barra superior (user-tools) */
-#user-tools {
+/* Sidebar */
+.module h2, .module caption {
+    background: var(--darker-bg);
     color: var(--text-color);
+    font-weight: bold;
+    border-bottom: 1px solid var(--border-color);
 }
 
-#user-tools a:link, #user-tools a:visited {
-    color: var(--action-text);
+/* Títulos de secciones */
+.app-auth .models h2,
+.app-django_celery_results .models h2,
+.app-snmp_scheduler .models h2 {
+    color: var(--section-title);
+    font-size: 1.2em;
+    font-weight: bold;
+    padding: 10px;
+    background: var(--darker-bg);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+}
+
+/* Enlaces de modelos */
+.model-list a {
+    color: var(--text-color);
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.model-list a:hover {
+    background: var(--darker-bg);
+    color: var(--primary-color);
     text-decoration: none;
 }
 
-#user-tools a:focus, #user-tools a:hover {
-    color: var(--primary-color);
+/* Botones */
+.button, input[type=submit], input[type=button], .submit-row input {
+    background: var(--primary-color);
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.button:hover, input[type=submit]:hover, input[type=button]:hover {
+    background: #1557b0;  /* Azul más oscuro */
+    transform: translateY(-2px);
+}
+
+/* Enlaces */
+a:link, a:visited {
+    color: var(--action-text);
+}
+
+a:hover {
+    color: var(--action-text);
     text-decoration: underline;
 }
 
-/* TÍTULOS DE APLICACIONES - FORZAR VISIBILIDAD */
-.app-list .app h2,
-.dashboard .app-list .app h2,
-.app-list .app .app-name,
-.app-list .app caption,
-.module h2,
-.module caption {
-    color: var(--text-color) !important;
-    background: var(--darker-bg) !important;
-    border-bottom: 1px solid var(--border-color) !important;
-    padding: 10px !important;
-    margin-bottom: 15px !important;
-    font-weight: bold !important;
-    font-size: 1.3em !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-/* TÍTULOS DE MODELOS */
-.app-list .app .model-list h3,
-.app-list .app .model-list caption {
-    color: var(--text-color) !important;
-    background: transparent !important;
-    font-weight: 500 !important;
-    font-size: 1.1em !important;
-    margin: 10px 0 5px 0 !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-/* ENLACES */
-.app-list .app .model-list a,
-.app-list .app a,
-.actionlist a,
-a:link, a:visited {
-    color: var(--link-color) !important;
-    font-weight: 500 !important;
-    text-decoration: none !important;
-    display: inline !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.app-list .app .model-list a:hover,
-.app-list .app a:hover,
-.actionlist a:hover,
-a:hover {
-    color: var(--link-hover) !important;
-    text-decoration: underline !important;
-}
-
-/* CAJAS DE APLICACIONES */
-.app-list .app,
-.dashboard .app-list .app,
-.module {
-    color: var(--text-color) !important;
-    background: var(--darker-bg) !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 4px !important;
-    padding: 15px !important;
-    margin-bottom: 20px !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-/* ACCIONES RECIENTES */
-.actionlist {
-    color: var(--action-text) !important;
-    font-weight: 500 !important;
-}
-
-.actionlist li {
-    color: var(--action-text) !important;
-    margin-bottom: 8px !important;
-    padding: 5px !important;
-    border-radius: 4px !important;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.actionlist .mini {
-    color: #6c757d !important;
-    font-size: 0.9em !important;
-    display: inline !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.module ul {
-    padding: 12px !important;
-    margin: 0 !important;
-    color: var(--text-color) !important;
-}
-
-/* BOTONES Y ENLACES DE ACCIÓN */
-.button, 
-input[type=submit], 
-input[type=button], 
-.submit-row input,
-.addlink, 
-.changelink, 
-.deletelink {
-    color: #ffffff !important;  /* Texto blanco forzado */
-    text-shadow: none !important;  /* Eliminar sombras de texto */
-    display: inline-block !important;
-    padding: 6px 12px !important;
-    margin: 2px !important;
-    border-radius: 4px !important;
-    text-decoration: none !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease-in-out !important;
-}
-
-.button:link, 
-.button:visited,
-.addlink:link,
-.addlink:visited,
-.changelink:link,
-.changelink:visited {
-    color: #ffffff !important;
-}
-
-.button:hover, 
-input[type=submit]:hover, 
-input[type=button]:hover {
-    background: #1557b0 !important;
-    transform: translateY(-2px) !important;
-}
-
-.addlink {
-    background: var(--primary-color) !important;
-    color: #ffffff !important;
-    border: 1px solid var(--primary-color) !important;
-}
-
-.addlink:hover {
-    background: var(--link-hover) !important;
-    border-color: var(--link-hover) !important;
-    color: #ffffff !important;
-    text-decoration: none !important;
-}
-
-.changelink {
-    background: #4CAF50 !important;  /* Verde para cambios */
-    color: #ffffff !important;
-    border: 1px solid #4CAF50 !important;
-}
-
-.changelink:hover {
-    background: #388E3C !important;
-    border-color: #388E3C !important;
-    color: #ffffff !important;
-    text-decoration: none !important;
-}
-
-.deletelink {
-    background: var(--accent-color) !important;
-    color: #ffffff !important;
-    border: 1px solid var(--accent-color) !important;
-}
-
-.deletelink:hover {
-    background: #c82333 !important;
-    border-color: #c82333 !important;
-    color: #ffffff !important;
-    text-decoration: none !important;
-}
-
-/* Asegurar que los íconos también sean visibles */
-.addlink:before,
-.changelink:before,
-.deletelink:before {
-    color: #ffffff !important;
-    opacity: 1 !important;
-}
-
-/* Ajuste para los íconos de acción en las tablas */
-td.field-_action .addlink,
-td.field-_action .changelink,
-td.field-_action .deletelink {
-    padding: 4px 8px !important;
-    font-size: 12px !important;
-}
-
-/* CAMPOS DE FORMULARIO - TAMAÑO NORMAL */
-input[type="text"], input[type="password"], input[type="email"], input[type="number"],
-input[type="url"], input[type="tel"], textarea, select {
-    background: var(--dark-bg) !important;
-    border: 1px solid var(--border-color) !important;
-    color: var(--text-color) !important;
-    border-radius: 4px !important;
-    padding: 6px 10px !important;
-    font-size: 13px !important;
-    line-height: 1.4 !important;
-    max-height: 200px !important;
-}
-
-/* TABLAS CON MEJOR CONTRASTE */
-#changelist table {
-    border: 1px solid var(--border-color) !important;
-    border-radius: 4px !important;
-    overflow: hidden !important;
-}
-
+/* Tablas */
 #changelist table thead th {
-    background: var(--darker-bg) !important;
-    color: var(--text-color) !important;
-    border-bottom: 1px solid var(--border-color) !important;
-    padding: 10px 8px !important;
-    font-weight: bold !important;
+    background: var(--darker-bg);
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .row1 {
-    background: var(--dark-bg) !important;
+    background: var(--dark-bg);
 }
 
 .row2 {
-    background: var(--darker-bg) !important;
+    background: var(--darker-bg);
 }
 
-/* LAYOUT PRINCIPAL DEL CHANGELIST */
-#changelist {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 20px !important;
-    padding: 20px !important;
-    position: relative !important;
+/* Formularios */
+.form-row {
+    background: var(--darker-bg);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color);
 }
 
-#changelist .changelist-content {
-    flex: 1 !important;
-    min-width: 0 !important;  /* Permite que el contenido se ajuste */
+/* Mensajes */
+.messagelist {
+    background: var(--darker-bg);
 }
 
-/* FILTROS - POSICIÓN FIJA A LA DERECHA */
+.success {
+    background: var(--primary-color);
+    color: #ffffff;
+}
+
+/* Efectos de hover */
+.module:hover {
+    border-color: var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+/* Personalización del logo */
+#header #branding h1 a:link, #header #branding h1 a:visited {
+    color: var(--primary-color);
+}
+
+/* Efectos de transición */
+* {
+    transition: all 0.3s ease;
+}
+
+/* Estilo para campos de selección */
+select:not(.selector select) {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    min-width: 200px;
+    height: auto;
+    font-size: 14px;
+    line-height: 1.5;
+    cursor: pointer;
+}
+
+select:not(.selector select):focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* Estilo para checkboxes */
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.checkbox-row label {
+    color: var(--text-color);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* Estilo para campos de texto */
+input[type="text"]:not(.selector-filter input), 
+input[type="password"], 
+input[type="email"], 
+input[type="number"],
+input[type="url"], 
+input[type="tel"], 
+textarea {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    width: 100%;
+    max-width: 400px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+input[type="text"]:not(.selector-filter input):focus, 
+input[type="password"]:focus, 
+input[type="email"]:focus,
+input[type="number"]:focus, 
+input[type="url"]:focus, 
+input[type="tel"]:focus,
+textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* Estilo para etiquetas de formulario */
+.form-row label {
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    display: block;
+}
+
+/* Estilo para campos requeridos */
+.required label {
+    color: var(--text-color);
+}
+
+.required label:after {
+    content: " *";
+    color: var(--accent-color);
+}
+
+/* Estilo para campos de fecha y hora */
+.vDateField, .vTimeField {
+    background: var(--dark-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    padding: 8px 12px;
+    width: 200px;
+    font-size: 14px;
+}
+
+/* Estilo para campos de radio */
+.radiolist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.radiolist label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.radiolist input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Mejoras adicionales para la visibilidad */
+.app-list .app {
+    background: var(--darker-bg);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.app-list .app:hover {
+    border-color: var(--primary-color);
+}
+
+.app-list .app .app-name {
+    color: var(--primary-color);
+    font-size: 1.3em;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+/* Estilo para las tablas */
+#changelist table {
+    border: 1px solid var(--border-color);
+}
+
+#changelist table td, #changelist table th {
+    border: 1px solid var(--border-color);
+}
+
+/* Estilos para el filtro tipo listbox */
 #changelist-filter {
-    position: sticky !important;
-    top: 20px !important;
-    right: 0 !important;
-    width: var(--filter-width) !important;
-    height: fit-content !important;
-    margin-left: auto !important;
-    background: var(--darker-bg) !important;
-    border: 1px solid var(--border-color) !important;
-    border-radius: 4px !important;
-    padding: 15px !important;
-    align-self: flex-start !important;
+    padding: 0;
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin: 0 0 10px 0;
 }
 
-/* Ajustar el contenedor principal para dar espacio al filtro */
-.change-list .filtered {
-    min-height: 400px !important;
-}
-
-/* Asegurar que la tabla de resultados no se desborde */
-.results {
-    width: 100% !important;
-    overflow-x: auto !important;
-}
-
-/* Estilos internos del panel de filtros */
 #changelist-filter h2 {
-    background: var(--darker-bg) !important;
-    color: var(--text-color) !important;
-    border-bottom: 1px solid var(--border-color) !important;
-    padding: 10px !important;
-    margin: -15px -15px 15px -15px !important;
-    border-radius: 4px 4px 0 0 !important;
-    font-size: 1.1em !important;
-    font-weight: bold !important;
+    font-size: 14px;
+    padding: 8px;
+    margin: 0;
+    background: var(--darker-bg);
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+#changelist-filter h3 {
+    font-size: 13px;
+    padding: 8px;
+    margin: 0;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--darker-bg);
+}
+
+#changelist-filter ul {
+    margin: 0;
+    padding: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--border-color);
 }
 
 #changelist-filter li {
-    margin-bottom: 8px !important;
-    padding: 5px !important;
-    border-radius: 3px !important;
-    background: var(--dark-bg) !important;
-    border: 1px solid var(--border-color) !important;
+    padding: 0;
+    margin: 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#changelist-filter li:last-child {
+    border-bottom: none;
+}
+
+#changelist-filter li a {
+    display: block;
+    padding: 6px 8px;
+    color: var(--text-color);
+    text-decoration: none;
 }
 
 #changelist-filter li.selected {
-    background: var(--hover-bg) !important;
-    border-color: var(--primary-color) !important;
+    background: var(--primary-color);
 }
 
 #changelist-filter li.selected a {
-    color: var(--link-hover) !important;
-    font-weight: bold !important;
+    color: #ffffff;
 }
 
+#changelist-filter li:hover:not(.selected) {
+    background: var(--hover-bg);
+}
+
+/* Modo oscuro para el filtro */
+@media (prefers-color-scheme: dark) {
+    #changelist-filter {
+        background: var(--darker-bg);
+    }
+
+    #changelist-filter h2,
+    #changelist-filter h3 {
+        background: var(--darker-bg);
+        color: var(--text-color);
+        border-color: var(--border-color);
+    }
+
+    #changelist-filter ul {
+        background: var(--dark-bg);
+    }
+
+    #changelist-filter li {
+        border-color: var(--border-color);
+    }
+
+    #changelist-filter li:hover:not(.selected) {
+        background: var(--hover-bg);
+    }
+
+    #changelist-filter li.selected {
+        background: var(--primary-color);
+    }
+
+    #changelist-filter li.selected a {
+        color: #ffffff;
+    }
+}
+
+/* Botones de acción */
+.addlink, .changelink, .deletelink {
+    background: var(--primary-color);
+    color: #ffffff !important;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+.deletelink {
+    background: var(--accent-color);
+}
+
+/* Mensajes de error */
+.errorlist {
+    color: var(--accent-color);
+}
+
+/* Mensajes de éxito */
+.success {
+    background: var(--primary-color);
+}
+
+/* Mensajes de advertencia */
+.warning {
+    background: #ffc107;
+    color: var(--dark-bg);
+}
+
+/* Estilo para las acciones recientes */
+.module h2, .module caption {
+    background: var(--darker-bg);
+    color: var(--text-color);
+    font-weight: bold;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Textos en las acciones recientes */
+.actionlist {
+    color: var(--action-text);
+    font-weight: 500;
+}
+
+.actionlist li {
+    color: var(--action-text);
+    margin-bottom: 8px;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.actionlist li:hover {
+    background: var(--hover-bg);
+}
+
+.actionlist a {
+    color: var(--action-text);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.actionlist a:hover {
+    color: var(--action-text);
+    text-decoration: underline;
+}
+
+/* Mejorar visibilidad de las fechas */
+.actionlist .mini {
+    color: #6c757d;
+    font-size: 0.9em;
+}
+
+/* Modo oscuro: fechas más claras */
+@media (prefers-color-scheme: dark) {
+    .actionlist .mini {
+        color: #c0c0c0;
+    }
+}
+
+/* Estilo para los módulos de acciones */
+.module {
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.module h2 {
+    padding: 12px;
+    margin: 0;
+    font-size: 1.1em;
+    background: var(--darker-bg);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--action-text);
+}
+
+.module ul {
+    padding: 12px;
+    margin: 0;
+}
+
+/* Mejorar visibilidad de los enlaces en las tablas */
+#changelist table a {
+    color: var(--action-text);
+}
+
+#changelist table a:hover {
+    color: var(--action-text);
+    text-decoration: underline;
+}
+
+/* Mejorar visibilidad de los enlaces en los filtros */
 #changelist-filter a {
-    color: var(--link-color) !important;
-    text-decoration: none !important;
-    display: block !important;
-    padding: 5px !important;
-    border-radius: 3px !important;
+    color: var(--action-text);
 }
 
 #changelist-filter a:hover {
-    background: var(--link-hover) !important;
-    color: var(--primary-color) !important;
-    text-decoration: none !important;
+    color: var(--action-text);
+    text-decoration: underline;
 }
 
-/* MODO OSCURO - SOLO CUANDO EL NAVEGADOR LO SOLICITE */
-@media (prefers-color-scheme: dark) {
-    body {
-        background: #0a1929 !important;
-        color: #ffffff !important;
-    }
-    
-    #header {
-        background: #132f4c !important;
-        color: #ffffff !important;
-        border-bottom: 1px solid #1e4976 !important;
-    }
-    
-    #user-tools {
-        color: #ffffff !important;
-    }
-    
-    #user-tools a:link, #user-tools a:visited {
-        color: #ffffff !important;
-    }
-    
-    #user-tools a:focus, #user-tools a:hover {
-        color: #81d4fa !important;
-    }
-    
-    .app-list .app h2,
-    .dashboard .app-list .app h2,
-    .app-list .app .app-name,
-    .app-list .app caption,
-    .module h2,
-    .module caption {
-        color: #ffffff !important;
-        background: #132f4c !important;
-        border-bottom: 1px solid #1e4976 !important;
-    }
-    
-    .app-list .app .model-list h3,
-    .app-list .app .model-list caption {
-        color: #ffffff !important;
-    }
-    
-    .app-list .app .model-list a,
-    .app-list .app a,
-    .actionlist a,
-    a:link, a:visited {
-        color: #ffffff !important;
-    }
-    
-    .app-list .app .model-list a:hover,
-    .app-list .app a:hover,
-    .actionlist a:hover,
-    a:hover {
-        color: #81d4fa !important;
-    }
-    
-    .app-list .app,
-    .dashboard .app-list .app,
-    .module {
-        color: #ffffff !important;
-        background: #132f4c !important;
-        border: 1px solid #1e4976 !important;
-    }
-    
-    .actionlist {
-        color: #ffffff !important;
-    }
-    
-    .actionlist li {
-        color: #ffffff !important;
-    }
-    
-    .actionlist .mini {
-        color: #c0c0c0 !important;
-    }
-    
-    .module ul {
-        color: #ffffff !important;
-    }
-    
-    input[type="text"], input[type="password"], input[type="email"], input[type="number"],
-    input[type="url"], input[type="tel"], textarea, select {
-        background: #0a1929 !important;
-        border: 1px solid #1e4976 !important;
-        color: #ffffff !important;
-    }
-    
-    #changelist table thead th {
-        background: #132f4c !important;
-        color: #ffffff !important;
-        border-bottom: 1px solid #1e4976 !important;
-    }
-    
-    .row1 {
-        background: #0a1929 !important;
-    }
-    
-    .row2 {
-        background: #132f4c !important;
-    }
-    
-    #changelist-filter {
-        background: #132f4c !important;
-        border: 1px solid #1e4976 !important;
-    }
-    
-    #changelist-filter h2 {
-        background: #132f4c !important;
-        color: #ffffff !important;
-        border-bottom: 1px solid #1e4976 !important;
-    }
-    
-    #changelist-filter li {
-        background: #0a1929 !important;
-        border: 1px solid #1e4976 !important;
-    }
-    
-    #changelist-filter li.selected {
-        background: #1e4976 !important;
-        border-color: #81d4fa !important;
-    }
-    
-    #changelist-filter li.selected a {
-        color: #81d4fa !important;
-    }
-    
-    #changelist-filter a {
-        color: #ffffff !important;
-    }
-    
-    #changelist-filter a:hover {
-        background: #1e4976 !important;
-        color: #81d4fa !important;
-    }
+#changelist-filter li.selected a {
+    color: var(--action-text);
+    font-weight: bold;
 } 
