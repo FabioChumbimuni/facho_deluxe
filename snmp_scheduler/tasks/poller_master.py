@@ -59,15 +59,16 @@ def decr_pollers(result, tarea_id):
         cache.set(key, 0, LOCK_TIMEOUT)
     return result
 
-@shared_task(name='snmp_scheduler.tasks.process_chunk')
-def process_chunk(chunk, tarea_id, ejec_id, host_id):
+@shared_task(name='snmp_scheduler.tasks.process_chunk', bind=True, max_retries=None)
+def process_chunk(self, chunk, tarea_id, ejec_id, host_id):
     """Procesa un chunk individual"""
     try:
         # Verificar límite de pollers
         active = incr_pollers(tarea_id)
         if active > MAX_POLLERS_PER_TASK:
             decr_pollers.delay(None, tarea_id)
-            process_chunk.retry(countdown=RETRY_DELAY)
+            # Usar un número muy alto en lugar de None para garantizar reintentos
+            self.retry(countdown=RETRY_DELAY, max_retries=999999)
             return None
 
         # Ejecutar worker y encadenar con decremento
@@ -80,19 +81,16 @@ def process_chunk(chunk, tarea_id, ejec_id, host_id):
         decr_pollers.delay(None, tarea_id)
         raise
 
-@shared_task(name='snmp_scheduler.tasks.process_remaining_chunks')
-def process_remaining_chunks(tarea_id, ejec_id, host_id, chunks):
+@shared_task(name='snmp_scheduler.tasks.process_remaining_chunks', bind=True, max_retries=None)
+def process_remaining_chunks(self, tarea_id, ejec_id, host_id, chunks):
     """Procesa los chunks restantes cuando hay slots disponibles"""
     if not chunks:
         return
 
     active = get_active_pollers(tarea_id)
     if active >= MAX_POLLERS_PER_TASK:
-        # Reintentar después de un delay
-        process_remaining_chunks.apply_async(
-            args=[tarea_id, ejec_id, host_id, chunks],
-            countdown=RETRY_DELAY
-        )
+        # Reintentar después de un delay con reintentos infinitos
+        self.retry(countdown=RETRY_DELAY, max_retries=999999)
         return
 
     # Procesar tantos chunks como slots disponibles
@@ -106,10 +104,7 @@ def process_remaining_chunks(tarea_id, ejec_id, host_id, chunks):
 
     # Si quedan chunks, programar el siguiente lote
     if remaining:
-        process_remaining_chunks.apply_async(
-            args=[tarea_id, ejec_id, host_id, remaining],
-            countdown=RETRY_DELAY
-        )
+        process_remaining_chunks.delay(tarea_id, ejec_id, host_id, remaining)
 
 @shared_task(bind=True, name='snmp_scheduler.tasks.ejecutar_bulk_wrapper', queue='principal')
 def ejecutar_bulk_wrapper(self, tarea_id=None, host_id=None):
