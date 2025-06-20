@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 TIPOS_BULK = [
     'onudesc', 'estado_onu', 'last_down', 
     'pot_rx', 'pot_tx', 'last_down_t',
-    'distancia_m', 'modelo_onu'
+    'distancia_m', 'modelo_onu',
+    'plan_onu'
 ]
 
 def get_current_interval(time):

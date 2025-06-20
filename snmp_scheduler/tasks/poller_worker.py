@@ -262,7 +262,7 @@ def poller_worker(self, tarea_id, ejecucion_id, indices, host_id):
                             try:
                                 onu_actual = OnuDato.objects.get(id=onu_id)
                                 valor_actual = getattr(onu_actual, campo)
-                                logger.info(f"[PLAN_ONU] Procesando ONU {onu_id} - Valor actual: '{valor_actual}', Valor nuevo: '{val}'")
+                                
                                 
                                 if val and val.lower() not in ('no such', 'nosuchinstance', 'nosuchobject'):
                                     # Si hay un valor nuevo válido, actualizarlo
