@@ -465,7 +465,8 @@ class OnuDatoAdmin(admin.ModelAdmin):
     search_fields = ['host', 'slotportonu', 'onudesc', 'modelo_onu']
     list_select_related = True
     list_per_page = 50
-    
+    change_list_template = "admin/snmp_scheduler/onu_dato_changelist.html"  # Personaliza el template
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.exclude(host__in=['scripts', 'Host'])
@@ -533,6 +534,32 @@ class OnuDatoAdmin(admin.ModelAdmin):
             models.Index(fields=['host', 'modelo_onu']),
             models.Index(fields=['distancia_m']),
         ]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                'exportar-todo/',
+                self.admin_site.admin_view(self.exportar_todo_excel),
+                name='snmp_scheduler_onudato_exportar_todo',
+            ),
+        ]
+        return custom_urls + urls
+
+    def exportar_todo_excel(self, request):
+        import pandas as pd
+        from django.http import HttpResponse
+        from django.db import connection
+
+        sql = 'SELECT * FROM onu_datos'
+        df = pd.read_sql(sql, connection)
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=onu_datos_completo.xlsx'
+        with pd.ExcelWriter(response, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        return response
 
 @admin.register(Host)
 class HostAdmin(admin.ModelAdmin):

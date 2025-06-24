@@ -1,0 +1,24 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .exportar-excel-btn {
+            float: left;
+            margin-right: 15px;
+        }
+    </style>
+{% endblock %}
+
+{% block object-tools %}
+    <div class="object-tools">
+        <ul>
+            <li class="exportar-excel-btn">
+                <a href="{% url 'admin:snmp_scheduler_onudato_exportar_todo' %}" class="addlink">
+                    📥 Exportar toda la tabla a Excel
+                </a>
+            </li>
+            {{ block.super }}
+        </ul>
+    </div>
+{% endblock %}
