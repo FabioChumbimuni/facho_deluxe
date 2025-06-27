@@ -25,7 +25,20 @@ def ejecutar_descubrimiento(self, tarea_id, host_id):
         # Verificar que el host pertenece a la tarea
         if not tarea.hosts.filter(pk=host_id).exists():
             raise Exception(f"El host {host_id} no está asociado a la tarea {tarea_id}")
-            
+
+        # NUEVO: Verificar si el host está activo
+        if not host.activo:
+            logger.warning(f"[descubrimiento] Host {host.nombre} no está activo, ignorando ejecución")
+            ejecucion = EjecucionTareaSNMP.objects.create(
+                tarea=tarea,
+                estado='F',
+                inicio=timezone.now(),
+                fin=timezone.now(),
+                host=host,
+                error="Host no activo"
+            )
+            return {"status": "skipped", "host": host.nombre, "reason": "Host no activo"}
+
         ejecucion = EjecucionTareaSNMP.objects.create(
             tarea=tarea,
             estado='E',
